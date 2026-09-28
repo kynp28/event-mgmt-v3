@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { UserSession } from "@eventcore/shared";
+import type { UserSession } from "@eventcore/shared";
 
 function useAuthGuard(role: string) {
   const navigate = useNavigate();

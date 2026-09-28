@@ -3,7 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { loginSchema, LoginPayload, UserSession } from "@eventcore/shared";
+import { loginSchema } from "@eventcore/shared";
+import type { LoginPayload, UserSession } from "@eventcore/shared";
 import { api } from "../lib/api";
 
 export function LoginPage() {
