@@ -31,6 +31,22 @@ app.post("/api/auth/login", loginLimiter, login);
 app.post("/api/auth/logout", logout);
 app.get("/api/auth/me", requireAuth, getMe);
 
+import * as eventController from "./controllers/event.controller";
+import { requireRole } from "./middlewares/auth.middleware";
+
+// Public Event Routes
+app.get("/api/events", eventController.getPublicEvents);
+app.get("/api/events/:id", eventController.getPublicEventById);
+
+// Organizer Event Routes
+const isOrganizer = [requireAuth, requireRole(["ORGANIZER"])];
+app.get("/api/organizer/events", isOrganizer, eventController.getMyEvents);
+app.post("/api/organizer/events", isOrganizer, eventController.createEvent);
+app.get("/api/organizer/events/:id", isOrganizer, eventController.getMyEventById);
+app.patch("/api/organizer/events/:id", isOrganizer, eventController.updateEvent);
+app.patch("/api/organizer/events/:id/status", isOrganizer, eventController.changeEventStatus);
+
+
 // Central error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err);

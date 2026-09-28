@@ -32,3 +32,43 @@ export const utcDateSchema = z.string().transform((val, ctx) => {
   }
   return date;
 });
+
+export const EventStatusEnum = z.enum(["DRAFT", "PUBLISHED", "CLOSED"]);
+export type EventStatus = z.infer<typeof EventStatusEnum>;
+
+export const rawEventSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional().nullable(),
+  startDate: utcDateSchema,
+  endDate: utcDateSchema,
+  location: z.string().min(1, "Location is required"),
+  coverImage: z.string()
+    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Must be a base64 encoded jpeg/png/webp image")
+    .refine((val) => val.length <= 2.8 * 1024 * 1024, "Image must be less than 2MB")
+    .optional().nullable(),
+  maxBoothsPerVendor: z.coerce.number().int().min(1).default(3),
+});
+
+export const baseEventSchema = rawEventSchema.refine(data => data.endDate >= data.startDate, {
+  message: "End date must be after or equal to start date",
+  path: ["endDate"],
+});
+
+export const createEventSchema = baseEventSchema;
+export type CreateEventPayload = z.infer<typeof createEventSchema>;
+
+export const updateEventSchema = rawEventSchema.partial().refine(data => {
+  if (data.startDate && data.endDate) {
+    return data.endDate >= data.startDate;
+  }
+  return true;
+}, {
+  message: "End date must be after or equal to start date",
+  path: ["endDate"],
+});
+export type UpdateEventPayload = z.infer<typeof updateEventSchema>;
+
+export const changeEventStatusSchema = z.object({
+  status: EventStatusEnum,
+});
+export type ChangeEventStatusPayload = z.infer<typeof changeEventStatusSchema>;

@@ -29,3 +29,20 @@ export async function getServerSession() {
     return null;
   }
 }
+
+export async function fetchServer(path: string, options?: RequestInit) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const apiUrl = process.env.API_URL || "http://localhost:4000";
+  
+  const headers = new Headers(options?.headers);
+  if (token) {
+    headers.set("Cookie", `token=${token}`);
+  }
+  
+  return fetch(`${apiUrl}${path}`, {
+    ...options,
+    headers,
+    cache: "no-store",
+  });
+}
