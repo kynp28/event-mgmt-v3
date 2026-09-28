@@ -1,29 +1,16 @@
+"use client";
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { loginSchema } from "@eventcore/shared";
 import type { LoginPayload, UserSession } from "@eventcore/shared";
-import { api } from "../lib/api";
+import { apiFetch } from "@/lib/api-client";
 
-export function LoginPage() {
-  const navigate = useNavigate();
+export default function LoginPage() {
+  const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
-
-  // Check auth state
-  useQuery({
-    queryKey: ["auth"],
-    queryFn: async () => {
-      const res = await api.get<{ user: UserSession }>("/api/auth/me");
-      const role = res.data.user.role;
-      if (role === "ADMIN") navigate("/admin");
-      else if (role === "ORGANIZER") navigate("/organizer");
-      else navigate("/vendor");
-      return res.data;
-    },
-    retry: false,
-  });
 
   const form = useForm<LoginPayload>({
     resolver: zodResolver(loginSchema),
@@ -33,16 +20,20 @@ export function LoginPage() {
   const onSubmit = async (data: LoginPayload) => {
     setServerError(null);
     try {
-      await api.post("/api/auth/login", data);
+      await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       
-      const res = await api.get<{ user: UserSession }>("/api/auth/me");
-      const role = res.data.user.role;
-      if (role === "ADMIN") navigate("/admin");
-      else if (role === "ORGANIZER") navigate("/organizer");
-      else navigate("/vendor");
+      const res = await apiFetch("/api/auth/me");
+      const user: UserSession = res.user;
+      
+      if (user.role === "ADMIN") router.push("/admin");
+      else if (user.role === "ORGANIZER") router.push("/organizer");
+      else router.push("/vendor");
       
     } catch (err: any) {
-      setServerError(err.response?.data?.error?.message || "An error occurred");
+      setServerError(err.message || "An error occurred");
     }
   };
 
