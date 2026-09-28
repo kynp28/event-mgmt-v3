@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ORGANIZER
+  VENDOR
+}
+
+enum OrganizerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum BoothStatus {
+  AVAILABLE
+  PAYMENT_PENDING
+  BOOKED
+  DISABLED
+}
+
+enum BookingStatus {
+  PAYMENT_PENDING
+  PENDING_VERIFICATION
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  password         String
+  name             String?
+  role             Role              @default(VENDOR)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  organizerProfile OrganizerProfile?
+  events           Event[]           @relation("EventOrganizer")
+  bookings         Booking[]         @relation("VendorBookings")
+  verifiedPayments Payment[]         @relation("PaymentVerifier")
+  tickets          Ticket[]
+  auditLogs        AuditLog[]
+}
+
+model OrganizerProfile {
+  id           String          @id @default(cuid())
+  userId       String          @unique
+  user         User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  companyName  String
+  status       OrganizerStatus @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Event {
+  id                 String      @id @default(cuid())
+  organizerId        String
+  organizer          User        @relation("EventOrganizer", fields: [organizerId], references: [id], onDelete: Restrict)
+  name               String
+  description        String?     @db.Text
+  startDate          DateTime
+  endDate            DateTime
+  location           String
+  coverImage         String?     @db.LongText
+  maxBoothsPerVendor Int         @default(3)
+  status             EventStatus @default(DRAFT)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  zones     Zone[]
+  booths    Booth[]
+  bookings  Booking[]
+  tickets   Ticket[]
+
+  @@index([organizerId])
+}
+
+model Zone {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booths Booth[]
+
+  @@index([eventId])
+}
+
+model Booth {
+  id        String      @id @default(cuid())
+  eventId   String
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  zoneId    String?
+  zone      Zone?       @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  code      String
+  price     Decimal     @db.Decimal(12, 2)
+  status    BoothStatus @default(AVAILABLE)
+  
+  // Physical size fields
+  physicalLength Decimal? @db.Decimal(8, 2)
+  physicalWidth  Decimal? @db.Decimal(8, 2)
+
+  // Canvas fields
+  x         Float?
+  y         Float?
+  width     Float?
+  height    Float?
+  rotation  Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookingItems BookingItem[]
+
+  @@unique([eventId, code])
+  @@index([eventId, status])
+  @@index([zoneId])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  vendorId       String
+  vendor         User          @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Restrict)
+  eventId        String
+  event          Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  status         BookingStatus @default(PAYMENT_PENDING)
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  holdExpiresAt  DateTime?
+  rejectionCount Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items    BookingItem[]
+  payments Payment[]
+  ticket   Ticket?
+
+  @@index([status, holdExpiresAt])
+  @@index([vendorId])
+  @@index([eventId])
+}
+
+model BookingItem {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  boothId   String
+  booth     Booth   @relation(fields: [boothId], references: [id], onDelete: Restrict)
+  price     Decimal @db.Decimal(12, 2) // Price at booking time
+
+  @@unique([bookingId, boothId])
+  @@index([bookingId])
+  @@index([boothId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  amount          Decimal       @db.Decimal(12, 2)
+  slipImage       String        @db.LongText
+  status          PaymentStatus @default(PENDING)
+  rejectionReason String?       @db.Text
+  verifiedById    String?
+  verifiedBy      User?         @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([bookingId])
+  @@index([verifiedById])
+}
+
+model Ticket {
+  id        String   @id @default(cuid())
+  token     String   @unique @default(uuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+}
