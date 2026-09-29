@@ -45,6 +45,7 @@ import * as eventController from "./controllers/event.controller";
 // Public Event Routes
 app.get("/api/events", eventController.getPublicEvents);
 app.get("/api/events/:id", eventController.getPublicEventById);
+app.get("/api/events/:id/booths", requireAuth, eventController.getEventBooths);
 
 // Organizer Event Routes
 const isOrganizer = [requireAuth, requireRole(["ORGANIZER"])];

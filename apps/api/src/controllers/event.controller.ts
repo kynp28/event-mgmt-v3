@@ -85,3 +85,17 @@ export async function changeEventStatus(req: Request, res: Response) {
     }
   }
 }
+
+import * as boothService from '../services/booth.service';
+
+export async function getEventBooths(req: Request, res: Response) {
+  try {
+    const booths = await boothService.getVisibleEventBooths(req.params.id, req.user!.id, req.user!.role);
+    res.json(booths);
+  } catch (err: any) {
+    if (err.code === "NOT_FOUND" || (err.error && err.error.code === "NOT_FOUND")) {
+      return res.status(404).json(err.error || { error: { code: "NOT_FOUND", message: err.message } });
+    }
+    throw err;
+  }
+}

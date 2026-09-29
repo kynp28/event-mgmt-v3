@@ -102,3 +102,33 @@ export async function updateBoothPositions(eventId: string, organizerId: string,
   );
   return { success: true };
 }
+
+export async function getVisibleEventBooths(eventId: string, userId: string, userRole: string) {
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event) throw new AppError(404, "NOT_FOUND", "Event not found");
+  
+  if (event.status === "DRAFT" || event.status === "CLOSED") { // Actually the user said if DRAFT, return 404 unless organizer/admin.
+    if (userRole !== "ADMIN" && event.organizerId !== userId) {
+      throw new AppError(404, "NOT_FOUND", "Event not found");
+    }
+  }
+
+  return db.booth.findMany({
+    where: { eventId },
+    select: {
+      id: true,
+      code: true,
+      price: true,
+      physicalLength: true,
+      physicalWidth: true,
+      x: true,
+      y: true,
+      width: true,
+      height: true,
+      rotation: true,
+      zoneId: true,
+      status: true
+    },
+    orderBy: { createdAt: "asc" }
+  });
+}
