@@ -72,3 +72,36 @@ export const changeEventStatusSchema = z.object({
   status: EventStatusEnum,
 });
 export type ChangeEventStatusPayload = z.infer<typeof changeEventStatusSchema>;
+
+// Zone Schemas
+export const createZoneSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  color: z.string().optional().nullable(),
+});
+export type CreateZonePayload = z.infer<typeof createZoneSchema>;
+
+export const updateZoneSchema = createZoneSchema.partial();
+export type UpdateZonePayload = z.infer<typeof updateZoneSchema>;
+
+// Booth Schemas
+export const BoothStatusEnum = z.enum(["AVAILABLE", "PAYMENT_PENDING", "BOOKED", "DISABLED"]);
+export type BoothStatus = z.infer<typeof BoothStatusEnum>;
+
+// We allow inputting numbers or strings for money/dimensions, but transform them to strings to avoid JS float issues,
+// and let the server handle them via Prisma Decimal.
+const decimalSchema = z.union([z.string(), z.number()]).transform((val) => String(val))
+  .refine(val => !isNaN(Number(val)) && Number(val) >= 0, "Must be a valid positive number");
+
+export const createBoothSchema = z.object({
+  code: z.string().min(1, "Code is required"),
+  zoneId: z.string().optional().nullable(),
+  price: decimalSchema,
+  physicalLength: decimalSchema.optional().nullable(),
+  physicalWidth: decimalSchema.optional().nullable(),
+  status: z.enum(["AVAILABLE", "DISABLED"]).default("AVAILABLE"),
+});
+export type CreateBoothPayload = z.infer<typeof createBoothSchema>;
+
+export const updateBoothSchema = createBoothSchema.partial();
+export type UpdateBoothPayload = z.infer<typeof updateBoothSchema>;
+

@@ -1,7 +1,6 @@
 import { EventForm } from "@/components/EventForm";
 import { getServerSession, fetchServer } from "@/lib/api-server";
 import { redirect } from "next/navigation";
-import { StatusActions } from "./StatusActions";
 
 export default async function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getServerSession();
@@ -26,16 +25,9 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Manage Event</h1>
-        <StatusActions eventId={event.id} currentStatus={event.status} />
-      </div>
-
-      <div className="bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-semibold mb-6">Edit Details</h2>
-        <EventForm eventId={event.id} initialData={initialData} />
-      </div>
+    <div className="bg-white p-6 rounded shadow max-w-3xl">
+      <h2 className="text-xl font-semibold mb-6">Edit Details</h2>
+      <EventForm eventId={event.id} initialData={initialData} />
     </div>
   );
 }

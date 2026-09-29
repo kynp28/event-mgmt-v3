@@ -46,6 +46,21 @@ app.get("/api/organizer/events/:id", isOrganizer, eventController.getMyEventById
 app.patch("/api/organizer/events/:id", isOrganizer, eventController.updateEvent);
 app.patch("/api/organizer/events/:id/status", isOrganizer, eventController.changeEventStatus);
 
+import * as zoneController from "./controllers/zone.controller";
+import * as boothController from "./controllers/booth.controller";
+
+// Zone Routes
+app.get("/api/organizer/events/:eventId/zones", isOrganizer, zoneController.getZones);
+app.post("/api/organizer/events/:eventId/zones", isOrganizer, zoneController.createZone);
+app.patch("/api/organizer/events/:eventId/zones/:zoneId", isOrganizer, zoneController.updateZone);
+app.delete("/api/organizer/events/:eventId/zones/:zoneId", isOrganizer, zoneController.deleteZone);
+
+// Booth Routes
+app.get("/api/organizer/events/:eventId/booths", isOrganizer, boothController.getBooths);
+app.post("/api/organizer/events/:eventId/booths", isOrganizer, boothController.createBooth);
+app.patch("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.updateBooth);
+app.delete("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.deleteBooth);
+
 
 // Central error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

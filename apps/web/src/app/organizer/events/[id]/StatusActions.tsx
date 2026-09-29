@@ -1,6 +1,6 @@
 "use client";
 
-import { apiClient } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,11 +11,10 @@ export function StatusActions({ eventId, currentStatus }: { eventId: string, cur
   const handleStatusChange = async (newStatus: string) => {
     try {
       setLoading(true);
-      const res = await apiClient(`/api/organizer/events/${eventId}/status`, {
+      await apiFetch(`/api/organizer/events/${eventId}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error("Failed to change status");
       router.refresh();
     } catch (err) {
       alert("Error changing status");

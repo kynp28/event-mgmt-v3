@@ -4,21 +4,31 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createEventSchema, CreateEventPayload } from "@eventcore/shared";
 import { useRouter } from "next/navigation";
-import { apiClient } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { useState } from "react";
+
+interface FormInput {
+  name: string;
+  description?: string | null;
+  location: string;
+  maxBoothsPerVendor?: number;
+  coverImage?: string | null;
+  startDate: string;
+  endDate: string;
+}
 
 export function EventForm({
   initialData,
   eventId,
 }: {
-  initialData?: Partial<CreateEventPayload>;
+  initialData?: Partial<FormInput>;
   eventId?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
 
-  const form = useForm<CreateEventPayload>({
-    resolver: zodResolver(createEventSchema),
+  const form = useForm<FormInput>({
+    resolver: zodResolver(createEventSchema) as any,
     defaultValues: {
       name: initialData?.name || "",
       description: initialData?.description || "",
@@ -27,28 +37,22 @@ export function EventForm({
       coverImage: initialData?.coverImage || "",
       startDate: initialData?.startDate || new Date().toISOString().split("T")[0],
       endDate: initialData?.endDate || new Date().toISOString().split("T")[0],
-    } as any,
+    },
   });
 
-  const onSubmit = async (data: CreateEventPayload) => {
+  const onSubmit = async (data: any) => {
     try {
       setError("");
-      let res;
       if (eventId) {
-        res = await apiClient(`/api/organizer/events/${eventId}`, {
+        await apiFetch(`/api/organizer/events/${eventId}`, {
           method: "PATCH",
           body: JSON.stringify(data),
         });
       } else {
-        res = await apiClient("/api/organizer/events", {
+        await apiFetch("/api/organizer/events", {
           method: "POST",
           body: JSON.stringify(data),
         });
-      }
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error?.message || "Failed to save event");
       }
 
       router.push("/organizer/events");
