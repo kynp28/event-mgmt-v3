@@ -46,6 +46,9 @@ export default async function EventManageLayout({
         <Link href={`/organizer/events/${id}/booths`} className="font-medium text-gray-600 hover:text-black">
           Booths
         </Link>
+        <Link href={`/organizer/events/${id}/payments`} className="font-medium text-gray-600 hover:text-black">
+          Payments
+        </Link>
       </div>
 
       <div>{children}</div>

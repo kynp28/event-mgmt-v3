@@ -48,6 +48,8 @@ app.patch("/api/organizer/events/:id/status", isOrganizer, eventController.chang
 
 import * as zoneController from "./controllers/zone.controller";
 import * as boothController from "./controllers/booth.controller";
+import * as bookingController from "./controllers/booking.controller";
+import * as paymentController from "./controllers/payment.controller";
 
 // Zone Routes
 app.get("/api/organizer/events/:eventId/zones", isOrganizer, zoneController.getZones);
@@ -60,6 +62,19 @@ app.get("/api/organizer/events/:eventId/booths", isOrganizer, boothController.ge
 app.post("/api/organizer/events/:eventId/booths", isOrganizer, boothController.createBooth);
 app.patch("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.updateBooth);
 app.delete("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.deleteBooth);
+
+// Organizer Payment Routes
+app.get("/api/organizer/events/:eventId/payments", isOrganizer, paymentController.getPayments);
+app.post("/api/organizer/payments/:paymentId/verify", isOrganizer, paymentController.verifyPayment);
+
+// Vendor Routes
+const isVendor = [requireAuth, requireRole(["VENDOR"])];
+app.get("/api/vendor/bookings", isVendor, bookingController.getMyBookings);
+app.post("/api/vendor/bookings", isVendor, bookingController.createBooking);
+app.post("/api/vendor/bookings/:bookingId/payments", isVendor, paymentController.uploadSlip);
+
+// Job endpoint
+app.post("/api/jobs/release-expired-bookings", bookingController.triggerReleaseJob);
 
 
 import { AppError } from "./utils/AppError";
@@ -81,4 +96,19 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 const PORT = 4000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+import cron from "node-cron";
+import * as bookingService from "./services/booking.service";
+
+// Run every minute
+cron.schedule("* * * * *", async () => {
+  try {
+    const released = await bookingService.releaseExpiredBookings();
+    if (released > 0) {
+      console.log(`[Cron] Released ${released} expired bookings.`);
+    }
+  } catch (err) {
+    console.error("[Cron] Error releasing expired bookings:", err);
+  }
 });

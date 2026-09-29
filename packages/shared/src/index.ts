@@ -105,3 +105,38 @@ export type CreateBoothPayload = z.infer<typeof createBoothSchema>;
 export const updateBoothSchema = createBoothSchema.partial();
 export type UpdateBoothPayload = z.infer<typeof updateBoothSchema>;
 
+// Booking Schemas
+export const BookingStatusEnum = z.enum(["PAYMENT_PENDING", "PENDING_VERIFICATION", "CONFIRMED", "CANCELLED", "EXPIRED"]);
+export type BookingStatus = z.infer<typeof BookingStatusEnum>;
+
+export const createBookingSchema = z.object({
+  eventId: z.string().min(1, "Event ID is required"),
+  boothIds: z.array(z.string()).min(1, "Must select at least one booth"),
+});
+export type CreateBookingPayload = z.infer<typeof createBookingSchema>;
+
+// Payment Schemas
+export const PaymentStatusEnum = z.enum(["PENDING", "APPROVED", "REJECTED"]);
+export type PaymentStatus = z.infer<typeof PaymentStatusEnum>;
+
+export const uploadSlipSchema = z.object({
+  slipImage: z.string()
+    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Must be a base64 encoded jpeg/png/webp image")
+    .refine((val) => val.length <= 2.8 * 1024 * 1024, "Image must be less than 2MB"),
+});
+export type UploadSlipPayload = z.infer<typeof uploadSlipSchema>;
+
+export const verifyPaymentSchema = z.object({
+  status: z.enum(["APPROVED", "REJECTED"]),
+  rejectionReason: z.string().optional().nullable(),
+}).refine(data => {
+  if (data.status === "REJECTED" && (!data.rejectionReason || data.rejectionReason.trim().length === 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Rejection reason is required when rejecting",
+  path: ["rejectionReason"],
+});
+export type VerifyPaymentPayload = z.infer<typeof verifyPaymentSchema>;
+
