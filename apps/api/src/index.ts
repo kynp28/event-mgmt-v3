@@ -1,4 +1,10 @@
 import "dotenv/config";
+
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL ERROR: JWT_SECRET is not set in the environment.");
+  process.exit(1);
+}
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
