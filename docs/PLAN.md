@@ -34,12 +34,13 @@
 
 ## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม
 - **Schema:**
-  - เพิ่มฟิลด์ `type` (String) ใน `Booth`
-  - สร้างโมเดล `EventFee` (`id`, `eventId`, `name`, `amount`, `createdAt`)
+  - สร้างโมเดล `BoothType` (`id`, `eventId`, `name`, `width`, `length`, `price`)
+  - `Booth` เพิ่มฟิลด์ `boothTypeId` โดยราคายังคงคัดลอกมาไว้ที่ `Booth.price` เป็นแหล่งอ้างอิงตอนจอง
+  - สร้างโมเดล `EventFee` (`id`, `eventId`, `name`, `amount`, `type` [enum `PER_BOOKING`, `PER_BOOTH`])
   - เพิ่มฟิลด์ `feesSnapshot` (Json) ในโมเดล `Booking` เพื่อเก็บรายละเอียดค่าธรรมเนียม ณ เวลาจอง
 - **Endpoints:**
-  - `POST/PUT /api/events/:id/fees` (Organizer): จัดการค่าธรรมเนียม
-  - `POST /api/bookings` (Vendor): ปรับ Logic ให้ดึง `EventFee` ทั้งหมดมาบวกกับราคาบูธ เพื่อเป็น `totalAmount`
+  - `POST/PUT /api/events/:id/fees` และ `POST/PUT /api/events/:id/booth-types` (Organizer): จัดการค่าธรรมเนียมและประเภทบูธ
+  - `POST /api/bookings` (Vendor): คำนวณ `totalAmount` โดยแยกตามประเภท `EventFee.type` (ถ้า `PER_BOOTH` คูณจำนวนบูธ, ถ้า `PER_BOOKING` บวกครั้งเดียว)
 - **การเปลี่ยนสถานะ:** ไม่มี
 - **Concurrency & Prevention:** ป้องกันการเปลี่ยนราคาระหว่างจองโดยโหลดราคาจาก `tx.booth` และ `tx.eventFee` ภายใน `$transaction` เดียวกันตอนคำนวณยอด
 - **Tests:**
@@ -51,33 +52,35 @@
 ## D. ยอมรับสัญญาเช่า
 - **Schema:**
   - เพิ่มฟิลด์ `termsAndConditions` (Text) ใน `Event`
-  - เพิ่มฟิลด์ `termsAcceptedAt` (DateTime) และ `termsHash` (String) ใน `Booking`
+  - เพิ่มฟิลด์ `termsAcceptedAt` (DateTime), `termsHash` (String) และ `termsSnapshot` (Text) ใน `Booking`
 - **Endpoints:**
-  - `POST /api/bookings` (Vendor): เพิ่ม `acceptTerms: boolean` ใน Body หากเป็น false ให้ Reject สร้าง Hash (SHA-256) ของ `Event.termsAndConditions` เก็บลง `Booking`
+  - `POST /api/bookings` (Vendor): รับ `termsHash` จาก Client เปรียบเทียบกับ Hash ฝั่งเซิร์ฟเวอร์ หากไม่ตรงให้ตอบ 409 เพื่อให้อ่านเวอร์ชันล่าสุด หากตรง บันทึกเวลา/Hash/ข้อความเต็ม ลงใน Booking
 - **การเปลี่ยนสถานะ:** ไม่มี
 - **Concurrency & Prevention:** ไม่มีผลต่อ Concurrency แต่เป็นการ Audit
 - **Tests:**
-  - จองบูธโดยไม่ยอมรับสัญญาเช่า ต้องถูก Reject
-  - จองบูธสำเร็จ ต้องบันทึกเวลาและ Hash ได้ตรงกับข้อความสัญญาของอีเวนต์
+  - จองโดยส่ง `termsHash` ผิด หรือไม่ได้ส่ง ต้องถูก Reject 409
+  - จองบูธสำเร็จ ต้องบันทึกเวลา, Hash และสำเนาข้อความ (Snapshot) ได้ถูกต้อง
 - **Web:** ฟอร์มสร้างงานเพิ่มช่องกรอกเงื่อนไข/สัญญา, Modal การจองเพิ่ม Checkbox ยอมรับสัญญาพร้อมแสดงข้อความสัญญา
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5 (ตรวจจับและบังคับใช้เงื่อนไขตามบริบท)
 
 ## E. ผู้ค้าสำรอง (Waitlist)
 - **Schema:**
+  - เพิ่มค่า `WAITLIST_HOLD` ใน enum `BoothStatus`
   - สร้างโมเดล `Waitlist` (`id`, `eventId`, `boothId`, `vendorId`, `status`, `expiresAt`, `createdAt`)
   - `WaitlistStatus` enum: `PENDING`, `OFFERED`, `ACCEPTED`, `REJECTED`, `EXPIRED`
 - **Endpoints:**
-  - `POST /api/waitlist` (Vendor): เข้าคิวสำหรับบูธที่สถานะเป็น `BOOKED` หรือ `PAYMENT_PENDING` 
-  - `POST /api/waitlist/:id/accept` (Vendor): กดยอมรับสิทธิ์เมื่อสถานะคิวเป็น `OFFERED`
+  - `POST /api/waitlist` (Vendor): เข้าคิวสำหรับบูธที่สถานะเป็น `BOOKED` หรือ `PAYMENT_PENDING` (ไม่มีการคำนวณโควตาในขั้นตอนนี้)
+  - `POST /api/waitlist/:id/accept` (Vendor): กดยอมรับสิทธิ์เมื่อสถานะคิวเป็น `OFFERED` (พร้อมส่ง `termsHash` ตรวจโควตา และสร้าง Booking ภายใน 10 นาที)
 - **การเปลี่ยนสถานะ:**
-  - `Waitlist`: `PENDING` -> `OFFERED` (โดยระบบ เมื่อบูธว่างลง)
+  - `Waitlist`: `PENDING` -> `OFFERED` (โดยระบบ เมื่อบูธว่างลง ให้เวลาตัดสินใจ 30 นาที)
   - `Waitlist`: `OFFERED` -> `ACCEPTED` / `REJECTED` / `EXPIRED`
 - **Concurrency & Prevention:**
   - ลงคิวซ้ำไม่ได้: ตั้งค่า `@unique([boothId, vendorId])` โดยที่ยังเป็น `PENDING` หรือ `OFFERED`
-  - จัดสรรให้คนเดียว: จังหวะที่บูธว่าง ต้องใช้ Transaction Lock หาลำดับคิวแรก อัปเดตคิวเป็น `OFFERED` และล็อคบูธไม่ให้คนอื่นทั่วไปจองได้ (เปลี่ยนสถานะบูธเป็น `WAITLIST_HOLD` ชั่วคราว หรือใช้ระบบ Hold ควบคู่กัน)
+  - จัดสรรให้คนเดียว: **ต้องมีฟังก์ชันกลาง (Central Function) ตัวเดียวที่จัดการการปลดบูธ** (จาก hold หมดเวลา, สลิปตก 2 รอบ, คิวหมดเวลา) ภายใน Transaction จะสแกนหาคิวแรก หากมีให้ตั้ง `Waitlist` เป็น `OFFERED` (หมดอายุ 30 นาที) และตั้งค่า `Booth` เป็น `WAITLIST_HOLD` ทันที หากไม่มีคิวให้ตั้งเป็น `AVAILABLE`
 - **Tests:**
-  - (1) Release Job หรือการยกเลิกบูธพร้อมกันหลายทาง ต้องจัดสรรสิทธิ์ให้คนแรกในคิวได้แค่ 1 คนเท่านั้น
+  - (1) ปลดบูธพร้อมกันหลายทาง ฟังก์ชันกลางต้องทำงานถูกต้อง ได้คนในคิว 1 คน และ Booth กลายเป็น `WAITLIST_HOLD`
   - (2) การยิง API เข้าคิวซ้ำบูธเดิมพร้อมกัน ต้องสำเร็จแค่ 1 รายการ นอกนั้นได้ 409
+  - (3) ถ้ารับสิทธิ์แล้ว Quota เกิน ต้องไม่ให้ผ่าน
 - **Web:** ผังบูธสำหรับผู้ค้าจะเปลี่ยนปุ่มเป็น "Join Waitlist" หากบูธไม่ว่าง, หน้า Dashboard เพิ่มส่วนแสดงคิวและปุ่มกดรับสิทธิ์
 - **Quality Requirements Coverage:** รองรับข้อ 1 (ป้องกัน Race condition ในการจัดสรรทรัพยากร) เพิ่ม Test ชุดใหม่เฉพาะสำหรับ Waitlist concurrency
 
@@ -100,8 +103,3 @@
 
 ---
 
-## คำถามเพื่อความชัดเจนก่อนเริ่มงาน (Clarifying Questions)
-1. **Waitlist Workflow (E):** เมื่อคิวแรกได้รับสิทธิ์ (OFFERED) ผู้ค้าจะมีเวลาตัดสินใจกี่นาทีก่อนที่สิทธิ์จะถูกริบหรือตกไปหาคิวถัดไป? และในระหว่างนั้น สถานะของตาราง `Booth` ควรเพิ่มค่า `WAITLIST_HOLD` ด้วยหรือไม่ เพื่อให้ง่ายต่อการซ่อนจากคนทั่วไป?
-2. **Additional Fees (C):** ค่าธรรมเนียมเพิ่มเติม เป็นค่าคงที่ที่บวกเข้ากับ **"ทุกๆ Booking ในอีเวนต์นั้น"** ใช่หรือไม่ (เช่น จอง 1 บูธ หรือ 2 บูธในบิลเดียวกัน ก็โดนค่าธรรมเนียมต่อ 1 Booking) หรือว่าเป็นค่าธรรมเนียม "ต่อบูธ"?
-3. **Terms Hash (D):** การบันทึก hash ของข้อความสัญญา ใช้เพียงแค่ฟังก์ชันเช่น SHA-256 ของข้อความเงื่อนไข ณ เวลาที่จอง แล้วเก็บลงในตาราง `Booking` ก็เพียงพอตามความต้องการแล้วใช่ไหมครับ?
-4. **Booth Types (C):** "ประเภทของบูธ" ในฝั่ง Schema ต้องการแค่เป็นฟิลด์ `type` (String) ในตาราง `Booth` (เช่น "Normal", "VIP") ก็พอ หรือต้องสร้างตารางแยก `BoothType` (ที่ผูกกับ Event) เพื่อให้ผู้จัดงานตั้งค่าชื่อประเภทและขนาดไว้ล่วงหน้าครับ?
