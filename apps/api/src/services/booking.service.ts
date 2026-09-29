@@ -2,7 +2,6 @@ import { db } from "../lib/db";
 import { Prisma } from "@prisma/client";
 import { CreateBookingPayload } from "@eventcore/shared";
 import { AppError } from "../utils/AppError";
-
 export async function getMyBookings(vendorId: string) {
   return db.booking.findMany({
     where: { vendorId },
@@ -15,37 +14,35 @@ export async function getMyBookings(vendorId: string) {
     orderBy: { createdAt: "desc" }
   });
 }
-
 export async function createBooking(vendorId: string, data: CreateBookingPayload) {
   const event = await db.event.findUnique({ where: { id: data.eventId } });
   if (!event) throw new AppError(404, "NOT_FOUND", "Event not found");
-
-  const activeBookingsCount = await db.booking.count({
-    where: {
-      eventId: data.eventId,
-      vendorId,
-      status: { in: ["PAYMENT_PENDING", "PENDING_VERIFICATION", "CONFIRMED"] }
-    }
-  });
-
-  if (activeBookingsCount + data.boothIds.length > event.maxBoothsPerVendor) {
-    throw new AppError(400, "LIMIT_EXCEEDED", `Maximum ${event.maxBoothsPerVendor} booths allowed per vendor for this event.`);
-  }
-
   // Ensure boothIds are unique and sorted ascending to prevent deadlocks
   const uniqueBoothIds = Array.from(new Set(data.boothIds)).sort();
-
   let attempt = 0;
   while (attempt < 2) {
     try {
       return await db.$transaction(async (tx) => {
+        // 0. Lock vendor to prevent concurrent quota bypass
+        await tx.$queryRaw`SELECT id FROM User WHERE id = ${vendorId} FOR UPDATE`;
+        const activeBoothCount = await tx.bookingItem.count({
+          where: {
+            booking: {
+              eventId: data.eventId,
+              vendorId,
+              status: { in: ["PAYMENT_PENDING", "PENDING_VERIFICATION", "CONFIRMED"] }
+            }
+          }
+        });
+        if (activeBoothCount + uniqueBoothIds.length > event.maxBoothsPerVendor) {
+          throw new AppError(400, "LIMIT_EXCEEDED", `Maximum ${event.maxBoothsPerVendor} booths allowed per vendor for this event.`);
+        }
         // 1. Lock/select the target booths in ASCENDING id order
         await tx.$queryRaw`
           SELECT id, price FROM Booth 
           WHERE id IN (${Prisma.join(uniqueBoothIds)}) 
           ORDER BY id ASC FOR UPDATE
         `;
-
         // 2. Atomic updateMany to hold
         const updateRes = await tx.booth.updateMany({
           where: {
@@ -57,17 +54,14 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
             status: "PAYMENT_PENDING"
           }
         });
-
         if (updateRes.count !== uniqueBoothIds.length) {
           throw new AppError(409, "BOOTHS_UNAVAILABLE", "One or more booths are no longer available");
         }
-
         // Fetch prices (we can just fetch them normally since they are locked)
         const booths = await tx.booth.findMany({
           where: { id: { in: uniqueBoothIds } },
           select: { id: true, price: true }
         });
-
         // 3. Create Booking
         let totalAmount = new Prisma.Decimal(0);
         const bookingItems = booths.map(b => {
@@ -77,9 +71,7 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
             price: b.price
           };
         });
-
         const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // +10 mins
-
         const booking = await tx.booking.create({
           data: {
             vendorId,
@@ -97,7 +89,6 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
             }
           }
         });
-
         return booking;
       });
     } catch (err: any) {
@@ -109,7 +100,6 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
     }
   }
 }
-
 export async function releaseExpiredBookings() {
   const expiredBookings = await db.booking.findMany({
     where: {
@@ -122,9 +112,7 @@ export async function releaseExpiredBookings() {
       items: true
     }
   });
-
   let releasedCount = 0;
-
   for (const booking of expiredBookings) {
     try {
       await db.$transaction(async (tx) => {
