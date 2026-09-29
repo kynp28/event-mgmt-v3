@@ -1,12 +1,13 @@
 import { db } from "../lib/db";
 import { CreateBoothPayload, UpdateBoothPayload } from "@eventcore/shared";
+import { AppError } from "../utils/AppError";
 
 async function verifyEventOwnership(eventId: string, organizerId: string) {
   const event = await db.event.findFirst({
     where: { id: eventId, organizerId }
   });
   if (!event) {
-    throw new Error("Event not found or not owned by you");
+    throw new AppError(404, "NOT_FOUND", "Event not found or not owned by you");
   }
 }
 
@@ -39,15 +40,15 @@ export async function updateBooth(eventId: string, boothId: string, organizerId:
   const booth = await db.booth.findFirst({
     where: { id: boothId, eventId }
   });
-  if (!booth) throw new Error("Booth not found");
+  if (!booth) throw new AppError(404, "NOT_FOUND", "Booth not found");
   
   if (booth.status === "BOOKED" || booth.status === "PAYMENT_PENDING") {
-    throw new Error(`Cannot edit a booth in ${booth.status} status`);
+    throw new AppError(400, "BAD_REQUEST", `Cannot edit a booth in ${booth.status} status`);
   }
 
   // Double check that we are not trying to update it to an illegal status manually
   if (data.status && data.status !== "AVAILABLE" && data.status !== "DISABLED") {
-    throw new Error(`Cannot manually set booth status to ${data.status}`);
+    throw new AppError(400, "BAD_REQUEST", `Cannot manually set booth status to ${data.status}`);
   }
 
   return db.booth.update({
@@ -69,10 +70,10 @@ export async function deleteBooth(eventId: string, boothId: string, organizerId:
   const booth = await db.booth.findFirst({
     where: { id: boothId, eventId }
   });
-  if (!booth) throw new Error("Booth not found");
+  if (!booth) throw new AppError(404, "NOT_FOUND", "Booth not found");
 
   if (booth.status === "BOOKED" || booth.status === "PAYMENT_PENDING") {
-    throw new Error(`Cannot delete a booth in ${booth.status} status`);
+    throw new AppError(400, "BAD_REQUEST", `Cannot delete a booth in ${booth.status} status`);
   }
 
   return db.booth.delete({

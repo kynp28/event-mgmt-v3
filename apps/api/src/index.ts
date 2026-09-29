@@ -62,8 +62,18 @@ app.patch("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothCo
 app.delete("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.deleteBooth);
 
 
+import { AppError } from "./utils/AppError";
+
 // Central error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({ error: { code: err.code, message: err.message } });
+  }
+  
+  if (err.name === "ZodError") {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", issues: err.issues } });
+  }
+
   console.error(err);
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
 });
