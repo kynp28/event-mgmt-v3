@@ -142,3 +142,11 @@ export type VerifyPaymentPayload = z.infer<typeof verifyPaymentSchema>;
 
 export const checkInSchema = z.object({ token: z.string().min(1, 'Token is required') });
 export type CheckInPayload = z.infer<typeof checkInSchema>;
+export const verifyOrganizerSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED']),
+  reason: z.string().optional()
+}).refine(data => {
+  if (data.status === 'REJECTED' && (!data.reason || data.reason.trim().length === 0)) return false;
+  return true;
+}, { message: 'Reason is required when rejecting', path: ['reason'] });
+export type VerifyOrganizerPayload = z.infer<typeof verifyOrganizerSchema>;

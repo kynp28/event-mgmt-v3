@@ -31,8 +31,16 @@ app.post("/api/auth/login", loginLimiter, login);
 app.post("/api/auth/logout", logout);
 app.get("/api/auth/me", requireAuth, getMe);
 
-import * as eventController from "./controllers/event.controller";
+import * as adminController from "./controllers/admin.controller";
 import { requireRole } from "./middlewares/auth.middleware";
+const isAdmin = [requireAuth, requireRole(["ADMIN"])];
+app.get("/api/admin/overview", isAdmin, adminController.getOverviewStats);
+app.get("/api/admin/organizers/pending", isAdmin, adminController.getPendingOrganizers);
+app.post("/api/admin/organizers/:id/verify", isAdmin, adminController.verifyOrganizer);
+app.get("/api/admin/users", isAdmin, adminController.getAllUsers);
+app.get("/api/admin/events", isAdmin, adminController.getAllEvents);
+
+import * as eventController from "./controllers/event.controller";
 
 // Public Event Routes
 app.get("/api/events", eventController.getPublicEvents);

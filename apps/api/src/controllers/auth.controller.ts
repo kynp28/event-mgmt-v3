@@ -1,8 +1,8 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { loginSchema } from "@eventcore/shared";
 import { AuthService } from "../services/auth.service";
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -18,15 +18,9 @@ export const login = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
-    res.json({ message: "Logged in successfully" });
+    res.json({ message: "Logged in successfully", user });
   } catch (error: any) {
-    if (error.message === "INVALID_CREDENTIALS") {
-      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
-    }
-    if (error.message === "ORGANIZER_NOT_APPROVED") {
-      return res.status(403).json({ error: { code: "FORBIDDEN", message: "Organizer account is not approved yet" } });
-    }
-    res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    next(error);
   }
 };
 
