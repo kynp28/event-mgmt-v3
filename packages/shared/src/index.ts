@@ -46,6 +46,10 @@ export const rawEventSchema = z.object({
     .regex(/^data:image\/(jpeg|png|webp);base64,/, "Must be a base64 encoded jpeg/png/webp image")
     .refine((val) => val.length <= 2.8 * 1024 * 1024, "Image must be less than 2MB")
     .optional().nullable(),
+  floorplanImage: z.string()
+    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Must be a base64 encoded jpeg/png/webp image")
+    .refine((val) => val.length <= 2.8 * 1024 * 1024, "Image must be less than 2MB")
+    .optional().nullable(),
   maxBoothsPerVendor: z.coerce.number().int().min(1).default(3),
 });
 
@@ -150,3 +154,14 @@ export const verifyOrganizerSchema = z.object({
   return true;
 }, { message: 'Reason is required when rejecting', path: ['reason'] });
 export type VerifyOrganizerPayload = z.infer<typeof verifyOrganizerSchema>;
+export const updateBoothPositionsSchema = z.object({
+  positions: z.array(z.object({
+    boothId: z.string(),
+    x: z.number().nullable(),
+    y: z.number().nullable(),
+    width: z.number().nullable(),
+    height: z.number().nullable(),
+    rotation: z.number().nullable()
+  }))
+});
+export type UpdateBoothPositionsPayload = z.infer<typeof updateBoothPositionsSchema>;

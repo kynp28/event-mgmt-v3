@@ -83,6 +83,7 @@ model Event {
   endDate            DateTime
   location           String
   coverImage         String?     @db.LongText
+  floorplanImage     String?     @db.LongText
   maxBoothsPerVendor Int         @default(3)
   status             EventStatus @default(DRAFT)
   createdAt          DateTime    @default(now())

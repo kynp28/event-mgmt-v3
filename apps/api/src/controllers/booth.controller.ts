@@ -55,3 +55,16 @@ export async function deleteBooth(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+import { updateBoothPositionsSchema } from '@eventcore/shared';
+
+export async function updatePositions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const eventId = req.params.eventId;
+    const userId = req.user!.id;
+    const data = updateBoothPositionsSchema.parse(req.body);
+    const result = await boothService.updateBoothPositions(eventId, userId, data);
+    res.json(result);
+  } catch (err: any) {
+    next(err);
+  }
+}

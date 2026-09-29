@@ -68,6 +68,7 @@ app.delete("/api/organizer/events/:eventId/zones/:zoneId", isOrganizer, zoneCont
 // Booth Routes
 app.get("/api/organizer/events/:eventId/booths", isOrganizer, boothController.getBooths);
 app.post("/api/organizer/events/:eventId/booths", isOrganizer, boothController.createBooth);
+app.put("/api/organizer/events/:eventId/booths/positions", isOrganizer, boothController.updatePositions);
 app.patch("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.updateBooth);
 app.delete("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.deleteBooth);
 

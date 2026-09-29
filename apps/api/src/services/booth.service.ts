@@ -80,3 +80,25 @@ export async function deleteBooth(eventId: string, boothId: string, organizerId:
     where: { id: boothId }
   });
 }
+import { UpdateBoothPositionsPayload } from '@eventcore/shared';
+
+export async function updateBoothPositions(eventId: string, organizerId: string, data: UpdateBoothPositionsPayload) {
+  await verifyEventOwnership(eventId, organizerId);
+  
+  // Update sequentially for simplicity (or use transaction)
+  await db.$transaction(
+    data.positions.map(p => 
+      db.booth.update({
+        where: { id: p.boothId, eventId }, // Also guards against cross-event injection
+        data: {
+          x: p.x,
+          y: p.y,
+          width: p.width,
+          height: p.height,
+          rotation: p.rotation
+        }
+      })
+    )
+  );
+  return { success: true };
+}
