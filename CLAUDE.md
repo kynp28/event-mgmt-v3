@@ -14,3 +14,7 @@
 - **System Safety**: Never run `taskkill /F /IM node.exe` system-wide. Always find the specific PID to kill.
 - **Dependencies**: Never silently upgrade major versions (e.g. Next.js). Pin exact versions and ask before changing them.
 - **Encoding**: Always use UTF-8 when writing or appending to config files (e.g. .gitignore). Do not use PowerShell's default echo/append which uses UTF-16.
+- ห้ามสร้างระบบซ้ำซ้อน ต้องลบของเก่าในงานเดียวกัน
+- ทุก state transition ของแถวที่ถูกแย่งได้ต้องเป็น conditional update และเช็ก count
+- ทุกฟีเจอร์ต้องมี Vitest test ก่อน commit
+- ยอดเงินคำนวณฝั่งเซิร์ฟเวอร์เท่านั้น
