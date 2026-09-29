@@ -11,3 +11,6 @@
 - **Booth Holds**: Atomic updateMany inside $transaction (ascending id order, retry on P2034). Idempotent hold-release job.
 - **Images**: Base64 max 2MB stored as LongText. Never selected in list queries.
 - **Dates**: Stored UTC, shown as Asia/Bangkok.
+- **System Safety**: Never run `taskkill /F /IM node.exe` system-wide. Always find the specific PID to kill.
+- **Dependencies**: Never silently upgrade major versions (e.g. Next.js). Pin exact versions and ask before changing them.
+- **Encoding**: Always use UTF-8 when writing or appending to config files (e.g. .gitignore). Do not use PowerShell's default echo/append which uses UTF-16.
