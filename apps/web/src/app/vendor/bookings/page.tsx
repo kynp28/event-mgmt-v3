@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 
+import { LogoutButton } from "@/components/LogoutButton";
+import Link from "next/link";
+
 export default function VendorBookingsPage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,15 @@ export default function VendorBookingsPage() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">My Bookings</h1>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <Link href="/vendor" className="text-blue-600 hover:underline mb-2 inline-block">
+            &larr; Back to Dashboard
+          </Link>
+          <h1 className="text-3xl font-bold">My Bookings</h1>
+        </div>
+        <LogoutButton />
+      </div>
       <div className="space-y-6">
         {bookings.map(booking => {
           const expiresAt = new Date(booking.holdExpiresAt);

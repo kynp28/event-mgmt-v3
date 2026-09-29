@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { StatusActions } from "./StatusActions";
 
+import { LogoutButton } from "@/components/LogoutButton";
+
 export default async function EventManageLayout({
   children,
   params,
@@ -33,7 +35,10 @@ export default async function EventManageLayout({
           </Link>
           <h1 className="text-3xl font-bold">{event.name}</h1>
         </div>
-        <StatusActions eventId={event.id} currentStatus={event.status} />
+        <div className="flex items-center gap-4">
+          <StatusActions eventId={event.id} currentStatus={event.status} />
+          <LogoutButton />
+        </div>
       </div>
 
       <div className="flex space-x-6 border-b border-gray-200 mb-8 pb-2">

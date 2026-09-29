@@ -7,6 +7,9 @@ import dynamic from "next/dynamic";
 
 const FloorplanCanvas = dynamic(() => import("@/components/FloorplanCanvas"), { ssr: false });
 
+import { LogoutButton } from "@/components/LogoutButton";
+import Link from "next/link";
+
 export default function VendorEventPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -58,8 +61,8 @@ export default function VendorEventPage() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (!event) return <div>Event not found</div>;
+  if (loading) return <div className="p-8">Loading...</div>;
+  if (!event) return <div className="p-8">Event not found</div>;
 
   const selectedTotal = selectedBooths.reduce((sum, bId) => {
     const b = booths.find(x => x.id === bId);
@@ -73,9 +76,15 @@ export default function VendorEventPage() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto flex flex-col h-[calc(100vh-64px)]">
-      <div className="mb-4">
-        <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
-        <p className="text-gray-600">{event.location} | Max Booths Per Vendor: {event.maxBoothsPerVendor}</p>
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <Link href="/vendor" className="text-blue-600 hover:underline mb-2 inline-block">
+            &larr; Back to Dashboard
+          </Link>
+          <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
+          <p className="text-gray-600">{event.location} | Max Booths Per Vendor: {event.maxBoothsPerVendor}</p>
+        </div>
+        <LogoutButton />
       </div>
       
       <div className="flex justify-between items-center mb-4">
