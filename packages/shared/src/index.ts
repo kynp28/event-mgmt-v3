@@ -140,3 +140,5 @@ export const verifyPaymentSchema = z.object({
 });
 export type VerifyPaymentPayload = z.infer<typeof verifyPaymentSchema>;
 
+export const checkInSchema = z.object({ token: z.string().min(1, 'Token is required') });
+export type CheckInPayload = z.infer<typeof checkInSchema>;

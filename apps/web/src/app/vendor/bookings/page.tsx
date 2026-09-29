@@ -88,6 +88,11 @@ export default function VendorBookingsPage() {
                   {booking.status === "PAYMENT_PENDING" && msLeft <= 0 && (
                     <p className="text-red-500 font-bold mt-2 text-sm">Expired</p>
                   )}
+                  {booking.status === "CONFIRMED" && (
+                    <div className="mt-2">
+                      <a href={`/vendor/bookings/${booking.id}/ticket`} className="text-blue-600 underline font-semibold">View Ticket</a>
+                    </div>
+                  )}
                 </div>
               </div>
               

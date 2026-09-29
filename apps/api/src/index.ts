@@ -63,15 +63,19 @@ app.post("/api/organizer/events/:eventId/booths", isOrganizer, boothController.c
 app.patch("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.updateBooth);
 app.delete("/api/organizer/events/:eventId/booths/:boothId", isOrganizer, boothController.deleteBooth);
 
+import * as ticketController from "./controllers/ticket.controller";
+
 // Organizer Payment Routes
 app.get("/api/organizer/events/:eventId/payments", isOrganizer, paymentController.getPayments);
 app.post("/api/organizer/payments/:paymentId/verify", isOrganizer, paymentController.verifyPayment);
+app.post("/api/organizer/events/:eventId/checkin", isOrganizer, ticketController.checkIn);
 
 // Vendor Routes
 const isVendor = [requireAuth, requireRole(["VENDOR"])];
 app.get("/api/vendor/bookings", isVendor, bookingController.getMyBookings);
 app.post("/api/vendor/bookings", isVendor, bookingController.createBooking);
 app.post("/api/vendor/bookings/:bookingId/payments", isVendor, paymentController.uploadSlip);
+app.get("/api/vendor/bookings/:bookingId/ticket", isVendor, ticketController.getMyTicket);
 
 // Job endpoint
 app.post("/api/jobs/release-expired-bookings", bookingController.triggerReleaseJob);
