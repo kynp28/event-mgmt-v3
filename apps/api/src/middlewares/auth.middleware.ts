@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { db } from "../lib/db";
 import { Role } from "@eventcore/shared";
+import { AppError } from "../utils/AppError";
 
 interface JwtPayload {
   userId: string;
@@ -71,6 +72,6 @@ export const verifyOrganizerEventOwnership = async (userId: string, eventId: str
     select: { organizerId: true }
   });
   if (!event || event.organizerId !== userId) {
-    throw new Error("FORBIDDEN");
+    throw new AppError(403, "FORBIDDEN", "You do not own this event");
   }
 };
