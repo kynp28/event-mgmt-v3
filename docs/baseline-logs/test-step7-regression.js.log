@@ -1,0 +1,23 @@
+=== 1. Login Admin ===
+Status: 200
+Role: ADMIN
+
+=== 2. Login Vendor ===
+Status: 200
+Role: VENDOR
+
+=== 3. Login Organizer (Approved) ===
+Status: 200
+Role: ORGANIZER
+
+=== 4. Login Wrong Password ===
+Status: 401
+Error Body: {
+  error: { code: 'UNAUTHORIZED', message: 'Invalid email or password' }
+}
+
+=== 5. Login User Not Found ===
+Status: 401
+Error Body: {
+  error: { code: 'UNAUTHORIZED', message: 'Invalid email or password' }
+}

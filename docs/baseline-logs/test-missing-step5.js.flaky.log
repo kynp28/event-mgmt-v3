@@ -1,0 +1,36 @@
+--- Run 1 ---
+Setting up data for additional tests...
+
+=== 1. Test maxBoothsPerVendor ===
+Status: 400
+Error: {"code":"LIMIT_EXCEEDED","message":"Maximum 2 booths allowed per vendor for this event."}
+
+=== 2. Test PENDING_VERIFICATION after slip upload ===
+Booking status in DB: PENDING_VERIFICATION (expected PENDING_VERIFICATION)
+
+=== 3. Test Ticket creation after approve ===
+Ticket exists: true
+Ticket token: a1be6d2e-2b77-4629-b615-aadbc19bb842
+
+=== 4. Confirm RAW DB row after First Reject ===
+RAW DB status: PAYMENT_PENDING
+RAW DB holdExpiresAt: Wed Sep 30 2026 17:00:01 GMT+0700 (เวลาอินโดจีน)
+
+
+--- Run 2 ---
+Setting up data for additional tests...
+
+=== 1. Test maxBoothsPerVendor ===
+Status: 400
+Error: {"code":"LIMIT_EXCEEDED","message":"Maximum 2 booths allowed per vendor for this event."}
+
+=== 2. Test PENDING_VERIFICATION after slip upload ===
+Booking status in DB: PENDING_VERIFICATION (expected PENDING_VERIFICATION)
+
+=== 3. Test Ticket creation after approve ===
+Ticket exists: true
+Ticket token: 847189fe-1527-4f86-8133-49e6b664aa3b
+
+=== 4. Confirm RAW DB row after First Reject ===
+RAW DB status: PAYMENT_PENDING
+RAW DB holdExpiresAt: Wed Sep 30 2026 17:00:15 GMT+0700 (เวลาอินโดจีน)

@@ -1,0 +1,27 @@
+=== GET /api/admin/users as Admin ===
+Status: 200
+Data length: 7
+Sample item: {
+  id: '<ID>',
+  email: 'vendor2@eventcore.com',
+  name: 'Vendor User 2',
+  role: 'VENDOR',
+  organizerProfile: null,
+  createdAt: '<TS>'
+}
+
+=== GET /api/admin/events as Admin ===
+Status: 200
+Data length: 1
+Sample item: {
+  id: 'sample-event-1',
+  name: 'Tech Expo 2026',
+  status: 'PUBLISHED',
+  startDate: '<TS>',
+  endDate: '<TS>',
+  organizer: { email: 'organizer@eventcore.com', name: 'Approved Organizer' },
+  _count: { booths: 3 }
+}
+
+=== GET /api/admin/users as Vendor ===
+Status: 403 (expected 403)

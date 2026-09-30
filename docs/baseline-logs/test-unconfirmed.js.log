@@ -1,0 +1,8 @@
+
+=== 1. Test checkIn with fake token (TICKET_NOT_FOUND) ===
+Status: 404 (expected 404)
+Error: TICKET_NOT_FOUND
+
+=== 2. Test checkIn with real token but booking is PAYMENT_PENDING (INVALID_TICKET) ===
+Status: 400 (expected 400)
+Error: INVALID_TICKET

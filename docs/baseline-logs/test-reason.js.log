@@ -1,0 +1,8 @@
+=== Reject with Reason A ===
+Login Error Msg: Organizer account was rejected. Reason: Reason A
+
+=== Admin Approves ===
+Login Status: 200 (should be 200)
+
+=== Admin Rejects with Reason B ===
+Login Error Msg: undefined

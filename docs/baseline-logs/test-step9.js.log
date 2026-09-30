@@ -1,0 +1,19 @@
+Logging in as vendor...
+Getting an event...
+Fetching booths via public endpoint...
+Fetch Status: 200
+Booths array length: 3
+Sample booth: {
+  id: '<ID>',
+  code: 'A01',
+  price: '5000',
+  physicalLength: null,
+  physicalWidth: null,
+  x: null,
+  y: null,
+  width: null,
+  height: null,
+  rotation: null,
+  zoneId: 'zone-a',
+  status: 'AVAILABLE'
+}

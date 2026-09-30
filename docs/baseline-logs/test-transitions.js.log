@@ -1,0 +1,13 @@
+=== 1. Reject the organizer ===
+Status: 200
+
+=== 2. Double-reject the organizer ===
+Status: 200 (expected 200 no-op)
+Message: Already rejected
+
+=== 3. Approve the organizer ===
+Status: 200
+
+=== 4. Reject the approved organizer ===
+Status: 400 (expected 400)
+Error: INVALID_TRANSITION
