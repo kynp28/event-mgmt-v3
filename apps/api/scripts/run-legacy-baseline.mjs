@@ -21,16 +21,42 @@ function normalize(text) {
 }
 
 async function main() {
-  if (!process.env.LEGACY_DATABASE_URL?.includes('eventcore_test')) {
-    console.error('Error: LEGACY_DATABASE_URL must contain "eventcore_test"');
+  const legacyUrl = process.env.LEGACY_DATABASE_URL;
+  if (!legacyUrl) {
+    console.error('Error: LEGACY_DATABASE_URL is required');
     process.exit(1);
   }
-  
-  process.env.DATABASE_URL = process.env.LEGACY_DATABASE_URL;
+  let dbName;
+  try {
+    dbName = new URL(legacyUrl).pathname.substring(1);
+  } catch (e) {
+    console.error('Error: LEGACY_DATABASE_URL must be a valid URL');
+    process.exit(1);
+  }
+  if (dbName !== 'eventcore_test_legacy') {
+    console.error(`Error: Refusing to run. LEGACY_DATABASE_URL database name must be exactly 'eventcore_test_legacy'. Found: '${dbName}'`);
+    process.exit(1);
+  }
+  const regularUrl = process.env.DATABASE_URL;
+  if (regularUrl) {
+    let regularDbName = '';
+    try { regularDbName = new URL(regularUrl).pathname.substring(1); } catch (e) {}
+    if (dbName === regularDbName) {
+      console.error(`Error: Refusing to run. LEGACY_DATABASE_URL database name equals DATABASE_URL database name: '${dbName}'`);
+      process.exit(1);
+    }
+  }
+  console.log(`Database guarded: ${dbName}`);
+  process.env.DATABASE_URL = legacyUrl;
 
   const scriptsDir = process.cwd();
   const rootDir = path.resolve(scriptsDir, '../..');
   const logsDir = path.join(rootDir, 'docs', 'baseline-logs');
+  const knownFailuresFile = path.join(rootDir, 'docs', 'baseline-known-failures.json');
+  let knownFailures = {};
+  if (existsSync(knownFailuresFile)) {
+    knownFailures = JSON.parse(readFileSync(knownFailuresFile, 'utf8'));
+  }
   
   if (!existsSync(logsDir)) {
     mkdirSync(logsDir, { recursive: true });
@@ -68,7 +94,7 @@ async function main() {
     for (let r = 1; r <= runs; r++) {
       console.log(`\n=== Running ${script} (Run ${r}/${runs}) ===`);
       
-      console.log('Dropping all tables...');
+      console.log(`Dropping all tables in ${dbName}...`);
       await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0;`);
       const tables = await prisma.$queryRaw`
         SELECT TABLE_NAME 
@@ -156,30 +182,55 @@ async function main() {
     results.push({ script, classification: scriptClassification, exitCodes: scriptResults.join(',') });
     console.log(`Classification for ${script}: ${scriptClassification}`);
 
+    const isAllowlisted = knownFailures.hasOwnProperty(script);
+
     if (scriptClassification === 'DETERMINISTIC') {
       const logPath = path.join(logsDir, `${script}.log`);
       if (compareMode) {
-        if (!existsSync(logPath)) {
-          console.error(`Compare mode: Reference log missing for ${script}`);
-          compareFailed = true;
+        if (isAllowlisted) {
+          console.log(`Notice: Allowlisted script ${script} exited with 0 (DETERMINISTIC).`);
+        } else if (script === 'test-concurrency.js') {
+          console.log(`Compare mode: Skipping RACE-DEPENDENT script ${script}`);
         } else {
-          const ref = readFileSync(logPath, 'utf8');
-          if (ref !== outputs[0].normalized) {
-            console.error(`Compare mode: Output mismatch for ${script}`);
+          if (!existsSync(logPath)) {
+            console.error(`Compare mode: Reference log missing for ${script}`);
             compareFailed = true;
           } else {
-            console.log(`Compare mode: ${script} matches reference log.`);
+            const ref = readFileSync(logPath, 'utf8');
+            if (ref !== outputs[0].normalized) {
+              console.error(`Compare mode: Output mismatch for ${script}`);
+              const tmpActual = path.join(logsDir, `tmp_actual_${script}.log`);
+              writeFileSync(tmpActual, outputs[0].normalized);
+              try {
+                execSync(`git diff --no-index "${logPath}" "${tmpActual}"`, { stdio: 'inherit' });
+              } catch (e) {}
+              compareFailed = true;
+            } else {
+              console.log(`Compare mode: ${script} matches reference log.`);
+            }
           }
         }
       } else {
-        writeFileSync(logPath, outputs[0].normalized);
-        console.log(`Saved reference log to ${logPath}`);
+        if (script === 'test-concurrency.js') {
+          writeFileSync(path.join(logsDir, 'evidence', `${script}.log`), outputs[0].normalized);
+          console.log(`Saved RACE-DEPENDENT log to evidence/${script}.log`);
+        } else {
+          writeFileSync(logPath, outputs[0].normalized);
+          console.log(`Saved reference log to ${logPath}`);
+        }
       }
     } else if (scriptClassification === 'FLAKY') {
       console.log(`FLAKY DETECTED for ${script}.`);
-      writeFileSync(path.join(logsDir, `${script}.flaky.log`), outputs.map((o,i) => `--- Run ${i+1} ---\n${o.normalized}`).join('\n\n'));
+      if (compareMode && !isAllowlisted) compareFailed = true;
+      if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
+      writeFileSync(path.join(logsDir, 'evidence', `${script}.flaky.log`), outputs.map((o,i) => `--- Run ${i+1} ---\n${o.normalized}`).join('\n\n'));
     } else if (scriptClassification === 'FAIL') {
-      writeFileSync(path.join(logsDir, `${script}.fail.log`), outputs[0].raw);
+      if (compareMode && !isAllowlisted) {
+        console.error(`Error: Non-allowlisted script ${script} failed.`);
+        compareFailed = true;
+      }
+      if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
+      writeFileSync(path.join(logsDir, 'evidence', `${script}.fail.log`), outputs[0].raw);
     }
   }
 

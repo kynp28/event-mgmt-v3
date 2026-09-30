@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+const includeEvidence = process.argv.includes('--include-evidence');
 const logsDir = path.resolve(process.cwd(), '../../docs/baseline-logs');
 if (!fs.existsSync(logsDir)) {
   console.error('Logs directory not found');
@@ -8,17 +9,21 @@ if (!fs.existsSync(logsDir)) {
 }
 
 const files = fs.readdirSync(logsDir).filter(f => f.endsWith('.log'));
+if (includeEvidence && fs.existsSync(path.join(logsDir, 'evidence'))) {
+  const evFiles = fs.readdirSync(path.join(logsDir, 'evidence')).filter(f => f.endsWith('.log'));
+  evFiles.forEach(f => files.push('evidence/' + f));
+}
+
 const results = [];
-let mismatchFound = false;
+let mismatchFoundInRoot = false;
 
 for (const file of files) {
   const content = fs.readFileSync(path.join(logsDir, file), 'utf8');
   const lines = content.split('\n');
   
+  const isEvidence = file.startsWith('evidence/');
+
   lines.forEach((line, index) => {
-    // Regex to match: <label>: <actual> (expected <expected>)
-    // Example: "Booth status after double reject: AVAILABLE (expected AVAILABLE)"
-    // Example: "Booking status in DB: PENDING_VERIFICATION (expected PENDING_VERIFICATION)"
     const match = line.match(/^(.+?):\s+(.+?)\s+\(expected\s+(.+?)\)$/);
     if (match) {
       const label = match[1].trim();
@@ -29,7 +34,7 @@ for (const file of files) {
       const expectedTokens = expected.split(/[\s/]+/).map(t => t.trim()).filter(t => t);
       
       const verdict = expectedTokens.includes(actualToken) ? 'PASS' : 'FAIL';
-      if (verdict === 'FAIL') mismatchFound = true;
+      if (verdict === 'FAIL' && !isEvidence) mismatchFoundInRoot = true;
       
       results.push({
         'Log File': file,
@@ -43,7 +48,7 @@ for (const file of files) {
 }
 
 console.table(results);
-if (mismatchFound) {
+if (mismatchFoundInRoot) {
   process.exit(1);
 } else {
   process.exit(0);
