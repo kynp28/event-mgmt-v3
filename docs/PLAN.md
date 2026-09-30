@@ -4,7 +4,7 @@
 
 **หลักการพื้นฐาน (Core Principle):**
 1. **Gate-First:** Conditional-update gates ต้องทำงานเป็นอันดับแรก หาก Gate คืนค่า count เป็น 0 (ล้มเหลว) ให้ Throw และ Rollback ทั้ง Transaction ทันที
-2. **Global Order:** Row locks (`SELECT ... FOR UPDATE` หรือ `FOR SHARE`) และการแก้ไขข้อมูลต้องเป็นไปตามลำดับนี้: `User` -> `Event` -> `Booth` (เรียงตาม `id` ASC) -> `Waitlist` -> `Booking` -> `Payment` -> `Ticket`
+2. **Global Order:** Row locks (`SELECT ... FOR UPDATE` หรือ `FOR SHARE`) และการแก้ไขข้อมูลต้องเป็นไปตามลำดับนี้: `User` -> `Event` -> `Booth` (เรียงตาม `id` ASC) -> `Waitlist` -> `Booking` -> `Payment` -> `Ticket`. หมายเหตุ: Global order อธิบายถึงลำดับการ Lock ข้อมูล ขณะที่ลำดับการลบข้อมูล (Deletion order) จะต้องเป็นไปตาม Data dependencies (ลบตารางลูกก่อนตารางแม่เสมอ)
 3. **Gate Wins:** หากหลักการ Gate-First ขัดแย้งกับ Global Order ให้ **Gate เป็นฝ่ายชนะ (Gate Wins)** เสมอ
 4. **Retry Mechanism:** ทุก Transaction ที่ลำดับเบี่ยงเบนจาก Global Order (เนื่องจาก Gate Wins) ต้องมีกลไก Catch Deadlock/Serialization errors (Prisma `P2034`, MySQL `1213`) และทำการ **Retry อย่างจำกัดจำนวนครั้ง (เช่น 3 ครั้ง)** และแต่ละ Transaction เหล่านี้ต้องมีการเขียน Concurrency Test ระบุในแผน
 
@@ -20,7 +20,7 @@
 | `verifyPayment reject` | `Payment` (gate/update) -> `Booking` -> `Booth` -> `Waitlist` (Central) | No | Gate (`Payment`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
 | `uploadSlip` | `Booking` (gate/updateMany) -> `Payment` (create) | Yes | เป็นไปตามลำดับ |
 | `changeEventStatus` | `Event` (gate/updateMany) | Yes | เป็นไปตามลำดับ |
-| `deleteEvent` | `Event` (FOR UPDATE) -> `Booth` (delete) -> `Waitlist` ฯลฯ -> `Event` (delete) | Yes | ล็อก `Event` เป็นลำดับแรกก่อนลบตารางลูก เป็นไปตามลำดับ |
+| `deleteEvent` | `Event` (FOR UPDATE) -> `Waitlist` ฯลฯ -> `Booth` (delete) -> `Event` (delete) | Yes | ล็อก `Event` เป็นลำดับแรก การลบตารางลูกทำตามลำดับ Data Dependency (ลบ Waitlist ก่อน Booth) |
 | `decline` / `leave` (Waitlist) | `Waitlist` (gate/update) -> `Booth` (updateMany) -> `Waitlist` (next offer) | No | Gate (`Waitlist`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
 
 ## Definition of Done (เกณฑ์ความสำเร็จ)
