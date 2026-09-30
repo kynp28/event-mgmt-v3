@@ -66,6 +66,18 @@ async function main() {
     },
   })
 
+  // 1 Vendor 2
+  const vendor2 = await prisma.user.upsert({
+    where: { email: 'vendor2@eventcore.com' },
+    update: {},
+    create: {
+      email: 'vendor2@eventcore.com',
+      password: passwordHash,
+      name: 'Vendor User 2',
+      role: 'VENDOR',
+    },
+  })
+
   // 1 Sample Event with Zones and Booths
   const event = await prisma.event.upsert({
     where: { id: 'sample-event-1' }, // we can't upsert by ID if it's cuid by default without providing it, but we can just create it if not exists.
