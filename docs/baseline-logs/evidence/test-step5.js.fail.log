@@ -6,8 +6,8 @@ V2 Status: 409
 Concurrency test: PASS
 
 === 2. Lifecycle Test (Success path) ===
-Booking created: cmunxkcop000dvccwuejwx4ml
-Payment uploaded: cmunxkcpg000hvccwt4bvj350
+Booking created: cmunymhd1000dvc5s8nt2ruaw
+Payment uploaded: cmunymhee000hvc5sp06uhw9b
 Payment verified: APPROVED
 Booth status after approve: BOOKED (expected BOOKED)
 
@@ -49,7 +49,7 @@ C:\Users\Lenovo\Desktop\event-mgmt-v3\apps\api\test-step5.js:105:24
       ?   ticket?: TicketNullableScalarRelationFilter | TicketWhereInput | Null
         },
         data: {
-          holdExpiresAt: new Date("2026-09-30T09:56:18.373Z")
+          holdExpiresAt: new Date("2026-09-30T10:25:57.336Z")
         }
       })
 
