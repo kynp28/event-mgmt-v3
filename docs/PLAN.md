@@ -1,31 +1,35 @@
 # แผนการพัฒนาฟีเจอร์ระดับ ★ (Tier 1)
 
 ## Global Lock Order
-เพื่อป้องกัน Deadlock ทุก Transaction ต้องเรียงลำดับการ Lock ข้อมูลดังนี้:
-1. `User`
-2. `Event` (ด้วย `FOR SHARE` หรือ `FOR UPDATE`)
-3. `Booth` (เรียงลำดับตาม ID แบบ Ascending `ORDER BY id ASC`)
-4. `Waitlist`
-5. `Booking`
-6. `Payment`
-7. `Ticket`
 
-หากมี Transaction ใดไม่สามารถทำตามลำดับนี้ได้ ต้องมีกลไกป้องกัน หรือทำการแก้ไขลำดับ
+**หลักการพื้นฐาน (Core Principle):**
+1. **Gate-First:** Conditional-update gates ต้องทำงานเป็นอันดับแรก หาก Gate คืนค่า count เป็น 0 (ล้มเหลว) ให้ Throw และ Rollback ทั้ง Transaction ทันที
+2. **Global Order:** Row locks (`SELECT ... FOR UPDATE` หรือ `FOR SHARE`) และการแก้ไขข้อมูลต้องเป็นไปตามลำดับนี้: `User` -> `Event` -> `Booth` (เรียงตาม `id` ASC) -> `Waitlist` -> `Booking` -> `Payment` -> `Ticket`
+3. **Gate Wins:** หากหลักการ Gate-First ขัดแย้งกับ Global Order ให้ **Gate เป็นฝ่ายชนะ (Gate Wins)** เสมอ
+4. **Retry Mechanism:** ทุก Transaction ที่ลำดับเบี่ยงเบนจาก Global Order (เนื่องจาก Gate Wins) ต้องมีกลไก Catch Deadlock/Serialization errors (Prisma `P2034`, MySQL `1213`) และทำการ **Retry อย่างจำกัดจำนวนครั้ง (เช่น 3 ครั้ง)** และแต่ละ Transaction เหล่านี้ต้องมีการเขียน Concurrency Test ระบุในแผน
 
-**ตารางลำดับการ Lock ของแต่ละ Transaction (Actual Lock Sequence):**
-| Transaction | ลำดับปัจจุบัน / ลำดับที่วางแผน | ตามกฎ? | การแก้ไข (Fix) / เหตุผล |
+**ตารางลำดับการ Lock และอัปเดตของแต่ละ Transaction:**
+| Transaction | ลำดับการ Lock/Update (Actual Sequence) | ตาม Global Order? | เหตุผลการเบี่ยงเบน / วิธีการแก้ไข |
 | --- | --- | --- | --- |
-| `createBooking` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Booth` (updateMany/FOR UPDATE) -> `Booking` (create) | Yes | - |
-| `waitlist accept` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Waitlist` (updateMany) -> `Booth` (updateMany) -> `Booking` (create) | No | (ดู **ABA Note** ด้านล่าง) |
-| Central release function | `Booth` (updateMany) -> `Waitlist` (updateMany) | Yes | - |
-| `releaseExpiredBookings` (Job) | `Booking` (update) -> `Booth` (updateMany) -> `Waitlist` (ผ่าน Central) | No | (ดู **Rollback Semantics** ด้านล่าง) |
-| offer-expiry job | `Waitlist` (update) -> `Booth` (ผ่าน Central) | No | แก้ไข: `Booth` (ผ่าน Central) -> `Waitlist` |
-| `verifyPayment approve` | `Payment` -> `Booking` -> `Booth` -> `Ticket` | No | (ดู **ABA Note / Gate Order** ด้านล่าง) |
-| `verifyPayment reject` | `Payment` -> `Booking` -> `Booth` -> `Waitlist` (ผ่าน Central) | No | (ดู **ABA Note / Gate Order** ด้านล่าง) |
-| `uploadSlip` | `Booking` (updateMany) -> `Payment` (create) | Yes | `Payment` อยู่หลัง `Booking` ตาม Global Order |
-| `changeEventStatus` | `Event` (updateMany) | Yes | - |
-| `deleteEvent` | `Booth` (delete) -> `Event` (delete) | No | แก้ไข: ล็อก `Event` (`FOR UPDATE`) จากนั้นลบลูก (`Booth`, `Waitlist` ฯลฯ) แล้วจึงลบ `Event` |
-| `decline` / `leave` (Waitlist) | `Waitlist` (update) -> `Booth` (ผ่าน Central) | No | แก้ไข: `Booth` (ผ่าน Central) -> `Waitlist` (update) |
+| `createBooking` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Booth` (gate/updateMany) -> `Booking` (create) | Yes | เป็นไปตามลำดับ |
+| `waitlist accept` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Waitlist` (gate/updateMany) -> `Booth` (updateMany) -> `Booking` (create) | No | Gate (`Waitlist`) ต้องมาก่อนเพื่อกัน ABA; ละเมิด Global Order; ต้องมีกลไก Retry + Concurrency test |
+| Central release function | `Booth` (updateMany) -> `Waitlist` (updateMany) | Yes | เป็นไปตามลำดับ |
+| `releaseExpiredBookings` (Job) | `Booking` (gate/update) -> `Booth` (updateMany) -> `Waitlist` (updateMany) | No | Gate (`Booking`) ต้องมาก่อนเพื่อยกเลิกการปล่อยบูธหากเพิ่งจ่ายเงินสำเร็จ; ต้องมี Retry + Concurrency test |
+| offer-expiry job | `Waitlist` (gate/update) -> `Booth` (updateMany) -> `Waitlist` (next offer) | No | Gate (`Waitlist`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
+| `verifyPayment approve` | `Payment` (gate/update) -> `Booking` -> `Booth` -> `Ticket` | No | Gate (`Payment`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
+| `verifyPayment reject` | `Payment` (gate/update) -> `Booking` -> `Booth` -> `Waitlist` (Central) | No | Gate (`Payment`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
+| `uploadSlip` | `Booking` (gate/updateMany) -> `Payment` (create) | Yes | เป็นไปตามลำดับ |
+| `changeEventStatus` | `Event` (gate/updateMany) | Yes | เป็นไปตามลำดับ |
+| `deleteEvent` | `Event` (FOR UPDATE) -> `Booth` (delete) -> `Waitlist` ฯลฯ -> `Event` (delete) | Yes | ล็อก `Event` เป็นลำดับแรกก่อนลบตารางลูก เป็นไปตามลำดับ |
+| `decline` / `leave` (Waitlist) | `Waitlist` (gate/update) -> `Booth` (updateMany) -> `Waitlist` (next offer) | No | Gate (`Waitlist`) ต้องมาก่อน; ต้องมี Retry + Concurrency test |
+
+## Definition of Done (เกณฑ์ความสำเร็จ)
+ข้อกำหนดเหล่านี้บังคับใช้กับทุก Feature ที่จะพัฒนา:
+1. **Vitest Suite Fully Green:** Test ทั้งหมดใน Vitest ต้องผ่าน 100%
+2. **Legacy Scripts Pass:** Legacy Scripts ทั้งหมดที่เคยเป็น PASS ใน `docs/BASELINE.md` จะต้องยังคงทำงานผ่านภายใต้ Baseline Protocol (reset, migrate deploy, seed, start API, run script, stop API)
+3. **No Type Errors:** คำสั่ง `pnpm --filter api exec tsc --noEmit` ต้องทำงานสำเร็จโดยไม่มี Error
+4. **Seed Compatibility:** ทุก Column ที่สร้างใหม่จะต้อง อนุญาตให้เป็น Nullable หรือต้องมี Default Value เพื่อให้ Seed Script ดั้งเดิมยังสามารถทำงานได้ตามปกติ
+5. **Dependency-Safe Teardown:** ฟังก์ชัน `clearDb` ใน `tests/helpers.ts` ต้องถูกปรับแก้เพิ่มลำดับการลบข้อมูลของตารางใหม่ตาม Dependency Order ที่ถูกต้อง (ลบตารางที่อ้างอิง User, Event, Booth ออกให้หมดก่อน)
 
 ## Rollback Semantics (กฏการยกเลิก Transaction)
 Any transaction that performs several conditional updates must **throw and roll back everything** if any gate update or dependent update returns count 0. 
@@ -34,9 +38,6 @@ Any transaction that performs several conditional updates must **throw and roll 
 
 ## ABA Note & Gate Order Deviation
 - **Waitlist Accept:** สถานะบูธ `WAITLIST_HOLD` ไม่สามารถระบุได้ว่า Offer ใดเป็นผู้ถือครองสิทธิ์ ดังนั้นการทำ Conditional update บนแถว `Waitlist` (โดยใช้ vendor, OFFERED, expiresAt ในอนาคต) จึงเป็นตัวตัดสิน (Arbiter/Gate) หากการปรับปรุง Gate นี้ล้มเหลว (เช่นหมดเวลาหรือยอมรับไปแล้ว) จะต้อง **Roll back** การกระทำทั้งหมด รวมถึงการปรับสถานะบูธ นี่เป็นเหตุผลที่การเรียงลำดับเป็น `Waitlist` -> `Booth` แทนที่จะเป็นไปตาม Global Order
-- **Release Expired Bookings:** อาศัย `Booking` เป็น Gate หากหมดอายุจึงจะปลดบูธ จึงใช้ `Booking` -> `Booth` -> `Waitlist` (เบี่ยงเบนจาก Global Order เพราะต้องตรวจ Booking ก่อนเพื่อ Rollback Booth หากไม่หมดอายุ)
-- **VerifyPayment Approve & Reject:** อาศัย `Payment` เป็น Gate (เช็กสถานะจาก PENDING) จากนั้นจึงทำการปรับปรุง `Booking`, `Booth`, และตารางอื่นๆ ซึ่งเบี่ยงเบนจาก Global Order แต่มีเป้าหมายเพื่อเป็น Gate ในการตัดสินใจและ Rollback หาก Gate ล้มเหลว
-
 
 ## S0. การจัดการความปลอดภัย Endpoint เดิม
 - **ช่องโหว่:** ปัจจุบัน `POST /api/jobs/release-expired-bookings` ไม่มีกลไกป้องกันใดๆ (มีเพียง `apps/api/test-step5.js` ที่ทดสอบผ่าน HTTP ส่วน Cron job เรียกผ่าน Service โดยตรง)
@@ -74,7 +75,9 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Tests ที่จะเขียนเพิ่ม:**
   - เข้าถึงงาน `DRAFT` ได้ 404
   - ข้อมูลบูธที่ `CONFIRMED` ต้องมีชื่อร้าน/สินค้า แต่ห้ามมีอีเมล/ชื่อจริง ในโหมด Public
-- **Test เดิมที่ต้องยังผ่าน:** `node apps/api/test-endpoint-rules.js` (ต้องยังทำงานได้เหมือนเดิม)
+- **Test เดิมที่ต้องยังผ่าน:**
+  - เขียน Characterization Tests ใน Vitest ที่บันทึกพฤติกรรมปัจจุบันของ `GET /api/events/:id/booths` (ฟิลด์ทั้งหมดที่จะคืนค่าให้ Vendor/Organizer, คืน 401 ให้ Anonymous, DRAFT ซ่อนสำหรับ Vendors) และต้องรันผ่านบนโค้ดชุดเดิมก่อนที่จะเริ่มแก้โค้ดเส้นทางนี้
+  - (หมายเหตุ: ลบ `test-endpoint-rules.js` ออกจากรายการเนื่องจาก NOT RUNNABLE จากปัญหา Hard-coded CUID)
 - **Web:** หน้า UI ต้องไม่แสดงปุ่ม "จอง" สำหรับอีเวนต์ที่เป็น `CLOSED` หรือ `ENDED`
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 

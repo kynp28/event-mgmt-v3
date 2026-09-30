@@ -28,4 +28,10 @@
 | test-step9.js | PASS | Running API on localhost:4000, seeded users & PUBLISHED event | - |
 | test-transitions.js | PASS | Running API on localhost:4000, seeded users | - |
 | test-unconfirmed.js | PASS | Running API on localhost:4000, seeded users & PUBLISHED event | - |
-| Vitest Suite | FAIL | Fresh DB, `npm run test` sets `NODE_ENV=test` | PrismaClientKnownRequestError: Invalid `db.user.deleteMany()` invocation in C:/Users/Lenovo/Desktop/event-mgmt-v3/apps/api/tests/helpers.ts:14:13 |
+| Vitest Suite | PASS (isolated) / FAIL (dirty) | Fresh DB, `npm run test` sets `NODE_ENV=test` | PrismaClientKnownRequestError: Invalid `db.user.deleteMany()` invocation (Foreign key constraint violated on `userId`) |
+
+
+## Vitest Suite Notes
+**Root Cause of Dirty Run Failure:**
+When the Vitest suite is run on a database that has just been reset (clean), it passes completely (12/12).
+When run on a database that the legacy scripts have previously used (dirty), it fails during `clearDb` teardown. The root cause is that `clearDb` in `tests/helpers.ts` deletes from `User` but does not first delete from `AuditLog`. Legacy scripts (like `test-transitions.js`) create `AuditLog` records that depend on `User`, leading to a foreign key constraint violation (บนฟิลด์ `userId`) เมื่อ `clearDb` พยายามลบ `User` ออก.
