@@ -13,7 +13,7 @@ async function main() {
     process.exit(1);
   }
 
-  const scriptsDir = path.join(process.cwd(), 'apps', 'api');
+  const scriptsDir = process.cwd();
   let scriptNames = process.argv.slice(2);
   
   if (scriptNames.length === 0) {
@@ -55,7 +55,7 @@ async function main() {
 
     // 4. Check if port is free before start
     try {
-      execSync('netstat -ano | findstr :4000');
+      execSync('netstat -ano | findstr :4000 | findstr LISTENING');
       console.error('Error: Port 4000 is not free before starting the server.');
       process.exit(1);
     } catch (e) {
@@ -106,8 +106,8 @@ async function main() {
     // Confirm port is free
     await new Promise(resolve => setTimeout(resolve, 2000)); // wait for OS to free port
     try {
-      execSync('netstat -ano | findstr :4000');
-      console.error('Error: Port 4000 is still in use after stopping server.');
+      execSync('netstat -ano | findstr :4000 | findstr LISTENING');
+      console.error('Error: Port 4000 is still in use (LISTENING) after stopping server.');
       process.exit(1);
     } catch (e) {
       // Good, port is free
