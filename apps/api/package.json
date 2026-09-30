@@ -11,7 +11,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "baseline:legacy": "node scripts/run-legacy-baseline.mjs",
-    "baseline:compare": "node scripts/run-legacy-baseline.mjs --compare"
+    "baseline:compare": "node scripts/run-legacy-baseline.mjs --compare",
+    "baseline:scan": "node scripts/check-expected-lines.mjs"
   },
   "dependencies": {
     "@eventcore/shared": "workspace:*",

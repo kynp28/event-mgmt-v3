@@ -4,6 +4,9 @@ import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import http from 'http';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
 
 const prisma = new PrismaClient();
 
@@ -12,14 +15,18 @@ function normalize(text) {
     .replace(/c[a-z0-9]{24}/g, '<ID>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<TS>')
     .replace(/\b\d+ms\b/g, '<MS>')
-    .replace(/eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+/g, '<TOKEN>');
+    .replace(/eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+/g, '<TOKEN>')
+    .replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/g, '<UUID>')
+    .replace(/[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4} \([^)]+\)/g, '<TS>');
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL?.includes('eventcore_test')) {
-    console.error('Error: DATABASE_URL must contain "eventcore_test"');
+  if (!process.env.LEGACY_DATABASE_URL?.includes('eventcore_test')) {
+    console.error('Error: LEGACY_DATABASE_URL must contain "eventcore_test"');
     process.exit(1);
   }
+  
+  process.env.DATABASE_URL = process.env.LEGACY_DATABASE_URL;
 
   const scriptsDir = process.cwd();
   const rootDir = path.resolve(scriptsDir, '../..');
