@@ -93,8 +93,8 @@ app.post("/api/vendor/bookings", isVendor, bookingController.createBooking);
 app.post("/api/vendor/bookings/:bookingId/payments", isVendor, paymentController.uploadSlip);
 app.get("/api/vendor/bookings/:bookingId/ticket", isVendor, ticketController.getMyTicket);
 
-// Job endpoint
-app.post("/api/jobs/release-expired-bookings", bookingController.triggerReleaseJob);
+import { requireJobsSecret } from "./middlewares/jobs.middleware";
+app.post("/api/jobs/release-expired-bookings", requireJobsSecret, bookingController.triggerReleaseJob);
 
 
 import { AppError } from "./utils/AppError";

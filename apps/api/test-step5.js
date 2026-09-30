@@ -104,7 +104,7 @@ async function run() {
   // Force holdExpiresAt to be in the past
   await prisma.booking.update({ where: { id: expireBookingId }, data: { holdExpiresAt: new Date(Date.now() - 1000) } });
   
-  res = await req(`/jobs/release-expired-bookings`, { method: "POST" });
+  res = await fetch(`http://localhost:4000/api/jobs/release-expired-bookings`, { method: "POST", headers: { "x-jobs-secret": process.env.JOBS_SECRET } }).then(async r => ({ status: r.status, json: await r.json() }));
   console.log(`Job released count: ${res.json.releasedCount}`);
   
   const expiredBooth = await prisma.booth.findUnique({ where: { id: rejectBoothId } });
