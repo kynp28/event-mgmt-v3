@@ -10,7 +10,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "test": "vitest run",
-    "baseline:legacy": "node scripts/run-legacy-baseline.mjs"
+    "baseline:legacy": "node scripts/run-legacy-baseline.mjs",
+    "baseline:compare": "node scripts/run-legacy-baseline.mjs --compare"
   },
   "dependencies": {
     "@eventcore/shared": "workspace:*",
