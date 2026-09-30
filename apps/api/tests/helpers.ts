@@ -2,6 +2,9 @@ import { db } from "../src/lib/db";
 import bcrypt from "bcryptjs";
 
 export async function clearDb() {
+  if (!process.env.DATABASE_URL?.includes("eventcore_test")) {
+    throw new Error("clearDb can only be run on eventcore_test database");
+  }
   await db.$transaction([
     db.ticket.deleteMany(),
     db.payment.deleteMany(),
@@ -10,6 +13,7 @@ export async function clearDb() {
     db.booth.deleteMany(),
     db.zone.deleteMany(),
     db.event.deleteMany(),
+    db.auditLog.deleteMany(),
     db.organizerProfile.deleteMany(),
     db.user.deleteMany()
   ]);
