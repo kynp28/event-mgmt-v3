@@ -16,16 +16,27 @@
 | Transaction | ลำดับปัจจุบัน / ลำดับที่วางแผน | ตามกฎ? | การแก้ไข (Fix) / เหตุผล |
 | --- | --- | --- | --- |
 | `createBooking` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Booth` (updateMany/FOR UPDATE) -> `Booking` (create) | Yes | - |
-| `waitlist accept` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Waitlist` (updateMany) -> `Booth` (updateMany) -> `Booking` (create) | No | แก้ไข: อัปเดต `Booth` (WAITLIST_HOLD->PAYMENT_PENDING) ก่อน แล้วจึงอัปเดต `Waitlist` (OFFERED->ACCEPTED) |
+| `waitlist accept` | `User` (FOR UPDATE) -> `Event` (FOR SHARE) -> `Waitlist` (updateMany) -> `Booth` (updateMany) -> `Booking` (create) | No | (ดู **ABA Note** ด้านล่าง) |
 | Central release function | `Booth` (updateMany) -> `Waitlist` (updateMany) | Yes | - |
-| `releaseExpiredBookings` (Job) | `Booking` (update) -> `Booth` (updateMany) -> `Waitlist` (ผ่าน Central) | No | แก้ไข: `Booth` -> `Waitlist` -> `Booking` (update) เพื่อให้ถูกลำดับ |
+| `releaseExpiredBookings` (Job) | `Booking` (update) -> `Booth` (updateMany) -> `Waitlist` (ผ่าน Central) | No | (ดู **Rollback Semantics** ด้านล่าง) |
 | offer-expiry job | `Waitlist` (update) -> `Booth` (ผ่าน Central) | No | แก้ไข: `Booth` (ผ่าน Central) -> `Waitlist` |
-| `verifyPayment approve` | `Payment` -> `Booking` -> `Booth` -> `Ticket` | No | แก้ไข: `Booth` -> `Booking` -> `Payment` -> `Ticket` |
-| `verifyPayment reject` | `Payment` -> `Booking` -> `Booth` -> `Waitlist` (ผ่าน Central) | No | แก้ไข: `Booth` -> `Waitlist` (ผ่าน Central) -> `Booking` -> `Payment` |
+| `verifyPayment approve` | `Payment` -> `Booking` -> `Booth` -> `Ticket` | No | (ดู **ABA Note / Gate Order** ด้านล่าง) |
+| `verifyPayment reject` | `Payment` -> `Booking` -> `Booth` -> `Waitlist` (ผ่าน Central) | No | (ดู **ABA Note / Gate Order** ด้านล่าง) |
 | `uploadSlip` | `Booking` (updateMany) -> `Payment` (create) | Yes | `Payment` อยู่หลัง `Booking` ตาม Global Order |
 | `changeEventStatus` | `Event` (updateMany) | Yes | - |
 | `deleteEvent` | `Booth` (delete) -> `Event` (delete) | No | แก้ไข: ล็อก `Event` (`FOR UPDATE`) จากนั้นลบลูก (`Booth`, `Waitlist` ฯลฯ) แล้วจึงลบ `Event` |
 | `decline` / `leave` (Waitlist) | `Waitlist` (update) -> `Booth` (ผ่าน Central) | No | แก้ไข: `Booth` (ผ่าน Central) -> `Waitlist` (update) |
+
+## Rollback Semantics (กฏการยกเลิก Transaction)
+Any transaction that performs several conditional updates must **throw and roll back everything** if any gate update or dependent update returns count 0. 
+สำหรับ Background jobs ที่ประมวลผลทีละรายการต่อหนึ่ง Transaction จะต้องใช้วิธี **catch the sentinel error, roll back that item's transaction, and continue with the next item**. คำว่า "Skip" จะไม่หมายถึงการ commit การเปลี่ยนแปลงเพียงบางส่วนโดยเด็ดขาด 
+**ตัวอย่าง (Expiry Job):** หาก Job ทำการปล่อยบูธ (Booth release) ไปก่อนหน้า แล้วต่อมาการเช็ก Booking gate คืนค่า count 0 (เช่น Vendor เพิ่งอัปโหลดสลิปสำเร็จในขณะนั้น) ตัว Transaction จะต้องถูก Rollback เพื่อยกเลิกการปล่อยบูธที่ทำไปแล้วด้วย
+
+## ABA Note & Gate Order Deviation
+- **Waitlist Accept:** สถานะบูธ `WAITLIST_HOLD` ไม่สามารถระบุได้ว่า Offer ใดเป็นผู้ถือครองสิทธิ์ ดังนั้นการทำ Conditional update บนแถว `Waitlist` (โดยใช้ vendor, OFFERED, expiresAt ในอนาคต) จึงเป็นตัวตัดสิน (Arbiter/Gate) หากการปรับปรุง Gate นี้ล้มเหลว (เช่นหมดเวลาหรือยอมรับไปแล้ว) จะต้อง **Roll back** การกระทำทั้งหมด รวมถึงการปรับสถานะบูธ นี่เป็นเหตุผลที่การเรียงลำดับเป็น `Waitlist` -> `Booth` แทนที่จะเป็นไปตาม Global Order
+- **Release Expired Bookings:** อาศัย `Booking` เป็น Gate หากหมดอายุจึงจะปลดบูธ จึงใช้ `Booking` -> `Booth` -> `Waitlist` (เบี่ยงเบนจาก Global Order เพราะต้องตรวจ Booking ก่อนเพื่อ Rollback Booth หากไม่หมดอายุ)
+- **VerifyPayment Approve & Reject:** อาศัย `Payment` เป็น Gate (เช็กสถานะจาก PENDING) จากนั้นจึงทำการปรับปรุง `Booking`, `Booth`, และตารางอื่นๆ ซึ่งเบี่ยงเบนจาก Global Order แต่มีเป้าหมายเพื่อเป็น Gate ในการตัดสินใจและ Rollback หาก Gate ล้มเหลว
+
 
 ## S0. การจัดการความปลอดภัย Endpoint เดิม
 - **ช่องโหว่:** ปัจจุบัน `POST /api/jobs/release-expired-bookings` ไม่มีกลไกป้องกันใดๆ (มีเพียง `apps/api/test-step5.js` ที่ทดสอบผ่าน HTTP ส่วน Cron job เรียกผ่าน Service โดยตรง)
@@ -126,9 +137,9 @@
   - คิวเรียงแบบ FIFO ด้วย `createdAt` และใช้ `id` เป็นตัวตัดสินกรณีที่เวลาเท่ากัน
   - การให้สิทธิ์ (Offer): ฟังก์ชันกลางต้องทำการตรวจโควตา หากผู้ค้าเกินโควตา ให้ข้ามคิว (ตั้งสถานะ `REJECTED` พร้อมบันทึก `reason`)
   - **ฟังก์ชันปล่อยบูธกลาง (Central Booth Release Function):** ทำ `updateMany` สำหรับ `Booth` จากนั้นทำ `updateMany` สำหรับ `Waitlist`
-    - Background jobs (expiry, offer expiry): หาก update count เป็น 0 แสดงว่า Process อื่นจัดการไปแล้ว ถือว่าสำเร็จแบบ Idempotent ให้ Skip และทำงานต่อได้เลย
-    - User-facing paths (accept, decline, verifyPayment reject): หาก count เป็น 0 ให้คืนค่า 409
-    - Abort Transaction ทันทีเฉพาะเมื่อเจอข้อมูลที่อยู่ในสถานะเป็นไปไม่ได้ (Broken Invariants) เท่านั้น
+    - Background jobs (expiry, offer expiry): ประมวลผลทีละรายการ หาก Gate คืนค่า 0 ให้ throw และ Roll back transaction ของรายการนั้น แล้ว continue ทำรายการถัดไป
+    - User-facing paths: หาก Gate หรือ Dependent คืนค่า count 0 ให้ throw ยกเลิกและคืนค่า 409
+    - (ดูอธิบายอย่างละเอียดในหมวด Rollback Semantics ด้านบน)
   - หากบูธถูกปรับเป็น `DISABLED` หรือลบทิ้ง เนื่องจาก FK เป็น Restrict จึงต้องตั้งค่า `Waitlist` ที่ผูกอยู่ให้เป็น `EXPIRED` พร้อมบันทึก `reason` ภายใน Transaction เดียวกันก่อนลบบูธ
   - Refactor แกนการจองให้ใช้ Logic ร่วมกันระหว่าง Accept และ Create Booking
 - **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** ลบโค้ด Inlined release ใน `services/booking.service.ts` และ `services/payment.service.ts`
@@ -155,9 +166,9 @@
   | --- | --- | --- | --- |
   | DRAFT | PUBLISHED | Yes | [New] ต้องมี T&C ไม่ว่างเปล่า และต้องมีการสร้าง Booth ไว้แล้ว |
   | PUBLISHED | DRAFT | Yes | [New] ต้องไม่มีข้อมูล Booking หรือ Waitlist ผูกอยู่กับอีเวนต์นี้ |
-  | PUBLISHED | CLOSED | Yes | [Existing] - |
-  | CLOSED | PUBLISHED | Yes | [Existing] - |
-  | CLOSED | ENDED | Yes | [Existing] - |
+  | PUBLISHED | CLOSED | Yes | [New] - |
+  | CLOSED | PUBLISHED | Yes | [New] - |
+  | CLOSED | ENDED | Yes | [New] - |
   | ENDED | (ใดๆ) | No | [New] สถานะสิ้นสุด (Terminal) ห้ามเปลี่ยนกลับ |
 
 **หมายเหตุ:** ทุกการเปลี่ยนสถานะที่ไม่ได้ระบุอยู่ในตารางนี้ คือ **ไม่อนุญาต (Not Allowed)**
@@ -174,6 +185,6 @@
   - ลบงาน DRAFT ที่มี Zone/Booth ต้องจัดการลบตารางลูกได้สมบูรณ์ใน Transaction เดียว
   - ลบงานไม่ได้ถ้ามี Booking ผูกอยู่
 - **Test เดิมที่ต้องยังผ่าน:** 
-  - `state-transitions.test.ts` (ข้อมูล Seed เดิมใน `tests/helpers.ts` สร้าง Event เป็น `PUBLISHED` อยู่แล้วจึงไม่กระทบกฎใหม่ที่ว่าต้องสร้าง Booking ตอนเป็น `PUBLISHED` เท่านั้น)
-  - `node apps/api/test-transitions.js`
+  - `state-transitions.test.ts` (ข้อมูล Seed เดิมใน `apps/api/tests/helpers.ts:48` สร้าง Event เป็น `PUBLISHED` อยู่แล้วจึงไม่กระทบกฎใหม่ที่ว่าต้องสร้าง Booking ตอนเป็น `PUBLISHED` เท่านั้น)
+  - หมายเหตุ: ปัจจุบันไม่มี Test เดิมที่ครอบคลุมถึง Event Status Transitions (`test-transitions.js` เดิมเป็นการทดสอบ Organizer Approval ไม่ใช่ Event Status)
 - **Quality Requirements Coverage:** ข้อ 5
