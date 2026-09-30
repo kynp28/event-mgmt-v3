@@ -36,6 +36,42 @@ async function main() {
     },
   })
 
+  // Fixture for legacy scripts (test-step4.js)
+  const organizer2 = await prisma.user.upsert({
+    where: { email: 'organizer2@eventcore.com' },
+    update: {},
+    create: {
+      email: 'organizer2@eventcore.com',
+      password: passwordHash,
+      name: 'Approved Organizer 2',
+      role: 'ORGANIZER',
+      organizerProfile: {
+        create: {
+          companyName: 'Awesome Events Co. 2',
+          status: 'APPROVED',
+        }
+      }
+    },
+  })
+
+  // Fixture for legacy scripts (test-step6.js)
+  const org2 = await prisma.user.upsert({
+    where: { email: 'org2@eventcore.com' },
+    update: {},
+    create: {
+      email: 'org2@eventcore.com',
+      password: passwordHash,
+      name: 'Approved Organizer 3',
+      role: 'ORGANIZER',
+      organizerProfile: {
+        create: {
+          companyName: 'Awesome Events Co. 3',
+          status: 'APPROVED',
+        }
+      }
+    },
+  })
+
   // 1 Pending Organizer
   const pendingOrganizer = await prisma.user.upsert({
     where: { email: 'pending@eventcore.com' },
