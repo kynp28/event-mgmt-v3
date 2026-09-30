@@ -1,0 +1,16 @@
+Setting up data for additional tests...
+
+=== 1. Test maxBoothsPerVendor ===
+Status: 400
+Error: {"code":"LIMIT_EXCEEDED","message":"Maximum 2 booths allowed per vendor for this event."}
+
+=== 2. Test PENDING_VERIFICATION after slip upload ===
+Booking status in DB: PENDING_VERIFICATION (expected PENDING_VERIFICATION)
+
+=== 3. Test Ticket creation after approve ===
+Ticket exists: true
+Ticket token: <UUID>
+
+=== 4. Confirm RAW DB row after First Reject ===
+RAW DB status: PAYMENT_PENDING
+RAW DB holdExpiresAt: <TS>
