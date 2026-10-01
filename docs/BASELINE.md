@@ -30,6 +30,8 @@ The login endpoint imposes a strict rate limit (`windowMs: 15 * 60 * 1000, max: 
 
 **Classification Authority:** A classification is authoritative ONLY when it comes from a 3-run `update-reference`. A 1-run `compare` (`--runs 1`, default) can only detect mismatches against the reference, not flakiness.
 
+**Known limitations:** FAIL evidence logs are raw output and churn between runs; `race-outcomes.md` count comes from the earlier 10-run experiment (commit `38ab5b6`).
+
 ## Feature Acceptance Checklist
 To accept a feature or fix, the following sequence must pass strictly sequentially:
 1. `git status --porcelain` (Expected: empty)

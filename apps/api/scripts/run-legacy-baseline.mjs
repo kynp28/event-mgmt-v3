@@ -1,5 +1,5 @@
 import { execSync, spawn } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, mkdtempSync, openSync, closeSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, mkdtempSync, openSync, closeSync, readdirSync, statSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { PrismaClient } from '@prisma/client';
@@ -114,6 +114,7 @@ async function main() {
     for (const script of scriptNames) {
       const scriptResults = [];
       const outputs = [];
+      const startTime = Date.now();
       
       for (let r = 1; r <= runs; r++) {
         console.log(`\n=== Running ${script} (Run ${r}/${runs}) ===`);
@@ -224,9 +225,10 @@ async function main() {
         }
       }
 
+      const elapsed = Date.now() - startTime;
       const scriptClassification = classify(script, outputs);
       rawResultsMap.push({ script, classification: scriptClassification, outputs });
-      results.push({ script, classification: scriptClassification, runs, exitCodes: scriptResults.join(',') });
+      results.push({ script, classification: scriptClassification, runs, durationMs: elapsed, exitCodes: scriptResults.join(',') });
       console.log(`Classification for ${script}: ${scriptClassification}`);
     }
 
@@ -350,7 +352,7 @@ async function main() {
   }
 }
 
-main().then(() => console.log('MAIN EXITED')).catch(e => {
+main().catch(e => {
   console.error(e);
   process.exitCode = 1;
 });
