@@ -4,9 +4,8 @@ import path from 'path';
 import os from 'os';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import http from 'http';
 import dotenv from 'dotenv';
-import { classify, validateReferenceUpdate, cleanupStaleFiles, isPortListening, normalize } from './baseline-lib.mjs';
+import { classify, validateReferenceUpdate, cleanupStaleFiles, isPortListening, normalize, waitForHealth, shouldWriteReference } from './baseline-lib.mjs';
 
 async function main() {
   const rootDir = path.resolve(process.cwd(), '../..');
@@ -137,84 +136,63 @@ async function main() {
         console.log('Starting server...');
         const serverLogFile = path.join(perRunLogsDir, `server.${script}.run${r}.log`);
         const outFd = openSync(serverLogFile, 'w');
-        const serverProcess = spawn('npx.cmd', ['tsx', 'src/index.ts'], {
-          cwd: scriptsDir,
-          env,
-          stdio: ['ignore', outFd, outFd],
-          shell: true,
-          detached: false
-        });
-        serverProcess.unref();
+        let serverProcess = null;
 
-        let serverHealthy = false;
-        let pollTimer;
         try {
-          await new Promise((resolve, reject) => {
-            let currentReq;
-            const timeout = setTimeout(() => {
-              clearTimeout(pollTimer);
-              if (currentReq) currentReq.destroy();
-              reject(new Error(`Server start timeout after ${healthTimeoutMs} ms`));
-            }, healthTimeoutMs);
-            const poll = () => {
-              currentReq = http.get('http://127.0.0.1:4000/api/health', (res) => {
-                if (res.statusCode === 200) {
-                  res.resume();
-                  clearTimeout(timeout);
-                  resolve(true);
-                } else {
-                  res.resume();
-                  pollTimer = setTimeout(poll, 500);
-                }
-              }).on('error', () => { pollTimer = setTimeout(poll, 500); });
-            };
-            poll();
+          serverProcess = spawn('npx.cmd', ['tsx', 'src/index.ts'], {
+            cwd: scriptsDir,
+            env,
+            stdio: ['ignore', outFd, outFd],
+            shell: true,
+            detached: false
           });
-          serverHealthy = true;
-          console.log('Server is healthy. Running script...');
-        } catch (e) {
-          console.error(e.message);
-        }
+          serverProcess.unref();
 
-        if (serverHealthy) {
-          let exitCode = 0;
-          let output = '';
           try {
-            const out = execSync(`node ${script}`, { cwd: scriptsDir, env, stdio: 'pipe', timeout: scriptTimeoutMs, maxBuffer: 16 * 1024 * 1024 });
-            output = out.toString();
-          } catch (e) {
-            if (e.code === 'ETIMEDOUT' || (e.signal === 'SIGTERM')) {
-              exitCode = -1;
-              output = 'TIMEOUT';
-            } else {
-              exitCode = e.status || 1;
-              output = (e.stdout ? e.stdout.toString() : '') + (e.stderr ? e.stderr.toString() : '');
+            await waitForHealth('http://127.0.0.1:4000/api/health', healthTimeoutMs);
+            console.log('Server is healthy. Running script...');
+
+            let exitCode = 0;
+            let output = '';
+            try {
+              const out = execSync(`node ${script}`, { cwd: scriptsDir, env, stdio: 'pipe', timeout: scriptTimeoutMs, maxBuffer: 16 * 1024 * 1024 });
+              output = out.toString();
+            } catch (e) {
+              if (e.code === 'ETIMEDOUT' || (e.signal === 'SIGTERM')) {
+                exitCode = -1;
+                output = 'TIMEOUT';
+              } else {
+                exitCode = e.status || 1;
+                output = (e.stdout ? e.stdout.toString() : '') + (e.stderr ? e.stderr.toString() : '');
+              }
             }
-          }
 
-          const normalized = normalize(output);
-          outputs.push({ exitCode, normalized, raw: output });
-          scriptResults.push(exitCode);
-          writeFileSync(path.join(perRunLogsDir, `${script}.run${r}.raw.log`), output);
-        }
-
-        console.log('Stopping server...');
-        if (serverProcess.pid) {
-          try { execSync(`taskkill /PID ${serverProcess.pid} /T /F`, { stdio: 'ignore' }); } catch(e) {}
-        }
-        closeSync(outFd);
-        
-        let portFree = false;
-        for (let i = 0; i < 10; i++) {
-          const netstatCheck = execSync('netstat -ano', { stdio: 'pipe' }).toString();
-          if (!isPortListening(netstatCheck, 4000)) {
-            portFree = true;
-            break;
+            const normalized = normalize(output);
+            outputs.push({ exitCode, normalized, raw: output });
+            scriptResults.push(exitCode);
+            writeFileSync(path.join(perRunLogsDir, `${script}.run${r}.raw.log`), output);
+          } catch (e) {
+            console.error(e.message);
           }
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        if (!portFree) {
-          throw new Error('Error: Port 4000 is not free after killing server.');
+        } finally {
+          console.log('Stopping server...');
+          if (serverProcess && serverProcess.pid) {
+            try { execSync(`taskkill /PID ${serverProcess.pid} /T /F`, { stdio: 'ignore' }); } catch(e) {}
+          }
+          try { closeSync(outFd); } catch(e) {}
+          
+          let portFree = false;
+          for (let i = 0; i < 10; i++) {
+            const netstatCheck = execSync('netstat -ano', { stdio: 'pipe' }).toString();
+            if (!isPortListening(netstatCheck, 4000)) {
+              portFree = true;
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          if (!portFree) {
+            throw new Error('Error: Port 4000 is not free after killing server.');
+          }
         }
       }
 
@@ -257,7 +235,7 @@ async function main() {
           compareFailed = true;
         }
         if (writeSafe) {
-          cleanupStaleFiles(script, classification, logsDir);
+          cleanupStaleFiles(script, classification, logsDir, allowlist);
           if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
           writeFileSync(path.join(logsDir, 'evidence', `${script}.timeout.log`), `TIMEOUT after ${scriptTimeoutMs}ms`);
         }
@@ -288,28 +266,36 @@ async function main() {
             }
           }
         } else if (writeSafe) {
-          cleanupStaleFiles(script, classification, logsDir);
-          writeFileSync(logPath, outputs[0].normalized);
-          console.log(`Saved reference log to ${logPath}`);
+          if (shouldWriteReference(script, classification, allowlist)) {
+            cleanupStaleFiles(script, classification, logsDir, allowlist);
+            writeFileSync(logPath, outputs[0].normalized);
+            console.log(`Saved reference log to ${logPath}`);
+          } else {
+            console.log(`Notice: allowlisted ${script} was ${classification}; references untouched`);
+          }
         }
       } else if (classification === 'RACE-DEPENDENT') {
         console.log(`RACE-DEPENDENT script ${script}.`);
         if (compareMode) {
           console.log(`Compare mode: Skipping RACE-DEPENDENT script ${script}`);
         } else if (writeSafe) {
-          cleanupStaleFiles(script, classification, logsDir);
-          if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
-          const distinct = {};
-          for (const o of outputs) {
-            distinct[o.normalized] = (distinct[o.normalized] || 0) + 1;
+          if (shouldWriteReference(script, classification, allowlist)) {
+            cleanupStaleFiles(script, classification, logsDir, allowlist);
+            if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
+            const distinct = {};
+            for (const o of outputs) {
+              distinct[o.normalized] = (distinct[o.normalized] || 0) + 1;
+            }
+            let raceLog = "";
+            let i = 1;
+            for (const [norm, count] of Object.entries(distinct)) {
+              raceLog += `--- Distinct Output ${i} (Seen ${count} times) ---\n${norm}\n\n`;
+              i++;
+            }
+            writeFileSync(path.join(logsDir, 'evidence', `${script}.race-outcomes.md`), raceLog);
+          } else {
+            console.log(`Notice: allowlisted ${script} was ${classification}; references untouched`);
           }
-          let raceLog = "";
-          let i = 1;
-          for (const [norm, count] of Object.entries(distinct)) {
-            raceLog += `--- Distinct Output ${i} (Seen ${count} times) ---\n${norm}\n\n`;
-            i++;
-          }
-          writeFileSync(path.join(logsDir, 'evidence', `${script}.race-outcomes.md`), raceLog);
         }
       } else if (classification === 'FLAKY') {
         console.log(`FLAKY DETECTED for ${script}.`);
@@ -320,9 +306,13 @@ async function main() {
         if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
         
         if (writeSafe) {
-          cleanupStaleFiles(script, classification, logsDir);
-          if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
-          writeFileSync(path.join(logsDir, 'evidence', `${script}.flaky.log`), outputs.map((o,i) => `--- Run ${i+1} ---\n${o.normalized}`).join('\n\n'));
+          if (shouldWriteReference(script, classification, allowlist)) {
+            cleanupStaleFiles(script, classification, logsDir, allowlist);
+            if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
+            writeFileSync(path.join(logsDir, 'evidence', `${script}.flaky.log`), outputs.map((o,i) => `--- Run ${i+1} ---\n${o.normalized}`).join('\n\n'));
+          } else {
+            console.log(`Notice: allowlisted ${script} was ${classification}; references untouched`);
+          }
         }
       } else if (classification === 'FAIL') {
         if (compareMode && !isAllowlisted) {
@@ -332,9 +322,13 @@ async function main() {
         }
         if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
         if (writeSafe) {
-          cleanupStaleFiles(script, classification, logsDir);
-          if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
-          writeFileSync(path.join(logsDir, 'evidence', `${script}.fail.log`), outputs[0].raw);
+          if (shouldWriteReference(script, classification, allowlist)) {
+            cleanupStaleFiles(script, classification, logsDir, allowlist);
+            if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
+            writeFileSync(path.join(logsDir, 'evidence', `${script}.fail.log`), outputs[0].raw);
+          } else {
+            console.log(`Notice: allowlisted ${script} was ${classification}; references untouched`);
+          }
         }
       }
     }

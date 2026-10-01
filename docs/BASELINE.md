@@ -15,7 +15,7 @@ The runner performs the following steps for each script:
 4. Generates a random `JOBS_SECRET` and provides it to both the API server and the test script.
 5. Starts the API server and polls `/api/health` until it returns 200 (timeout configurable via `BASELINE_HEALTH_TIMEOUT_MS`, default 60000). The server must be completely healthy. If unhealthy, the script is marked `NOT RUNNABLE`.
 6. Runs the legacy script and normalizes its output. Script execution is bounded by `BASELINE_SCRIPT_TIMEOUT_MS` (default 120000). If it exceeds this, the script is classified as `TIMEOUT`.
-7. Stops the server process tree cleanly in a `finally` block and verifies port 4000 is free using precise `netstat` regex matching (`:4000\b`). Cleanup of file descriptors, temporary directories, and DB connections is guaranteed to run on every exit path.
+7. Stops the server process tree cleanly. Cleanup of file descriptors, server shutdown, temporary directories, and DB connections is guaranteed to run on every path through the per-run section. Port 4000 is verified free using precise `netstat` regex matching (`:4000\b`).
 
 **Important Rule:** The runner and Vitest must be kept strictly sequential. The runner uses the isolated legacy database (`eventcore_test_legacy`) while Vitest uses `eventcore_test`.
 
@@ -23,11 +23,12 @@ The runner performs the following steps for each script:
 - **Allowlist (`docs/baseline-known-failures.json`)**: Tracks scripts that fail deterministically due to known bugs. Failures here do not fail the CI gate (they print "KNOWN FAIL (allowlisted)"). If an allowlisted script magically passes (exit 0), the gate prints a notice but does not fail.
 - **Exit Code Rules (`baseline:compare`)**: The process exits non-zero if a script is `NOT RUNNABLE`, `TIMEOUT`, mismatched, or if a `FAIL`/`FLAKY` script is not on the allowlist. Mismatch diffs use a temporary directory in `%TEMP%` that is strictly cleaned up on all exits.
 - **Update Refusal**: `--update-reference` strictly refuses to write any references if: requested runs are < 3, any script is `NOT RUNNABLE` or `TIMEOUT`, or any non-allowlisted script is `FLAKY`, or if output mismatches across runs for `DETERMINISTIC` scripts.
+- **Allowlisted Updates**: For an allowlisted script, `--update-reference` must never write or delete a root reference log, and must never delete its evidence/*.fail.log; if it is not FAIL in that update, print Notice: allowlisted <script> was <classification>; references untouched and write nothing for it. Non-allowlisted scripts behave normally.
 - **Scan Scope**: `baseline:scan` only checks logs directly inside `docs/baseline-logs`.
 
-## Retracted Root Causes
-- Original `baseline-runner.mjs` execution hang: NOT TESTED (defensive hardening was added).
-- API terminal window race causing issues: NOT KNOWN.
+## Open questions
+- the original runner hang is NOT TESTED (the `res.resume()`, `unref()`, fd closing and script-timeout changes are defensive hardening);
+- the Windows Terminal window running `cmd.exe /K npx.cmd tsx src\index.ts` is NOT KNOWN.
 
 ## Legacy Scripts Status
 | Script | Classification | Passed | Known Mismatches | Cause / Coverage |
@@ -39,7 +40,7 @@ The runner performs the following steps for each script:
 | test-missing-step5.js | DETERMINISTIC | 3/3 | none | - |
 | test-reason.js | DETERMINISTIC | 3/3 | none | - |
 | test-step4.js | DETERMINISTIC | 3/3 | none | - |
-| test-step5.js | FAIL | 0/5 | 2 (undefined != PENDING_RETRY/CANCELLED) | Vendor quota max limits (2) reached when vendor1 wins concurrent race |
+| test-step5.js | FLAKY | 0/3 | 2 (undefined != PENDING_RETRY/CANCELLED) | Vendor quota max limits (2) reached when vendor1 wins concurrent race |
 | test-step6.js | DETERMINISTIC | 3/3 | none | - |
 | test-step7-regression.js | DETERMINISTIC | 3/3 | none | - |
 | test-step7.js | DETERMINISTIC | 3/3 | none | - |
@@ -47,3 +48,6 @@ The runner performs the following steps for each script:
 | test-step9.js | DETERMINISTIC | 3/3 | none | - |
 | test-transitions.js | DETERMINISTIC | 3/3 | none | - |
 | test-unconfirmed.js | DETERMINISTIC | 3/3 | none | - |
+
+test-step5.js is allowlisted; observed FAIL in standalone 5/5 runs and 3/3 update runs, but exit 0 in two later full compare passes; classification is unstable and is not evidence either way.
+Note: `durationMs` covers the whole per-script pipeline (reset, migrate, seed, server start, script).

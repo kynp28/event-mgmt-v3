@@ -74,11 +74,13 @@ export function validateReferenceUpdate(results, allowlist, requestedRuns) {
  * @param {string} script 
  * @param {string} classification 
  * @param {string} logsDir 
+ * @param {Record<string, string>} allowlist 
  */
-export function cleanupStaleFiles(script, classification, logsDir) {
+export function cleanupStaleFiles(script, classification, logsDir, allowlist) {
   const filesToDelete = [];
+  const isAllowlisted = allowlist && Object.prototype.hasOwnProperty.call(allowlist, script);
   
-  if (classification !== 'DETERMINISTIC') {
+  if (classification !== 'DETERMINISTIC' && !isAllowlisted) {
     filesToDelete.push(path.join(logsDir, `${script}.log`));
   }
   if (classification !== 'RACE-DEPENDENT') {
@@ -87,7 +89,7 @@ export function cleanupStaleFiles(script, classification, logsDir) {
   if (classification !== 'FLAKY') {
     filesToDelete.push(path.join(logsDir, 'evidence', `${script}.flaky.log`));
   }
-  if (classification !== 'FAIL') {
+  if (classification !== 'FAIL' && !isAllowlisted) {
     filesToDelete.push(path.join(logsDir, 'evidence', `${script}.fail.log`));
   }
   if (classification !== 'TIMEOUT') {
@@ -134,4 +136,57 @@ export function normalize(text) {
     .replace(/eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+/g, '<TOKEN>')
     .replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/g, '<UUID>')
     .replace(/[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4} \([^)]+\)/g, '<TS>');
+}
+
+import http from 'http';
+
+export function waitForHealth(url, timeoutMs, { intervalMs = 500 } = {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let pollTimer;
+    let currentReq = null;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(pollTimer);
+      if (currentReq) currentReq.destroy();
+      reject(new Error(`Server start timeout after ${timeoutMs} ms`));
+    }, timeoutMs);
+
+    const poll = () => {
+      if (settled) return;
+      currentReq = http.get(url, { timeout: 2000 }, (res) => {
+        res.resume();
+        if (settled) return;
+        if (res.statusCode === 200) {
+          settled = true;
+          clearTimeout(timeout);
+          clearTimeout(pollTimer);
+          resolve(true);
+        } else {
+          pollTimer = setTimeout(poll, intervalMs);
+        }
+      });
+
+      currentReq.on('timeout', () => {
+        if (currentReq) currentReq.destroy();
+      });
+
+      currentReq.on('error', () => {
+        if (settled) return;
+        pollTimer = setTimeout(poll, intervalMs);
+      });
+    };
+
+    poll();
+  });
+}
+
+export function shouldWriteReference(script, classification, allowlist) {
+  const isAllowlisted = Object.prototype.hasOwnProperty.call(allowlist, script);
+  if (isAllowlisted) {
+    return classification === 'FAIL';
+  }
+  return true;
 }
