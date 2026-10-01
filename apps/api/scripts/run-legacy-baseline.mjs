@@ -1,11 +1,12 @@
 import { execSync, spawn } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, mkdtempSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, mkdtempSync, openSync, closeSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import http from 'http';
 import dotenv from 'dotenv';
+import { classify, validateReferenceUpdate, cleanupStaleFiles } from './baseline-lib.mjs';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
 
@@ -23,27 +24,23 @@ function normalize(text) {
 async function main() {
   const legacyUrl = process.env.LEGACY_DATABASE_URL;
   if (!legacyUrl) {
-    console.error('Error: LEGACY_DATABASE_URL is required');
-    process.exit(1);
+    throw new Error('Error: LEGACY_DATABASE_URL is required');
   }
   let dbName;
   try {
     dbName = new URL(legacyUrl).pathname.substring(1);
   } catch (e) {
-    console.error('Error: LEGACY_DATABASE_URL must be a valid URL');
-    process.exit(1);
+    throw new Error('Error: LEGACY_DATABASE_URL must be a valid URL');
   }
   if (dbName !== 'eventcore_test_legacy') {
-    console.error(`Error: Refusing to run. LEGACY_DATABASE_URL database name must be exactly 'eventcore_test_legacy'. Found: '${dbName}'`);
-    process.exit(1);
+    throw new Error(`Error: Refusing to run. LEGACY_DATABASE_URL database name must be exactly 'eventcore_test_legacy'. Found: '${dbName}'`);
   }
   const regularUrl = process.env.DATABASE_URL;
   if (regularUrl) {
     let regularDbName = '';
     try { regularDbName = new URL(regularUrl).pathname.substring(1); } catch (e) {}
     if (dbName === regularDbName) {
-      console.error(`Error: Refusing to run. LEGACY_DATABASE_URL database name equals DATABASE_URL database name: '${dbName}'`);
-      process.exit(1);
+      throw new Error(`Error: Refusing to run. LEGACY_DATABASE_URL database name equals DATABASE_URL database name: '${dbName}'`);
     }
   }
   console.log(`Database guarded: ${dbName}`);
@@ -83,6 +80,10 @@ async function main() {
     }
   }
 
+  if (updateReference && runs < 3) {
+    throw new Error(`Error: --update-reference requires at least 3 runs, but ${runs} requested.`);
+  }
+
   const gitOutput = execSync('git ls-files test-*.js', { cwd: scriptsDir }).toString();
   const validScripts = gitOutput.split('\n').map(s => s.trim()).filter(s => s);
 
@@ -91,8 +92,7 @@ async function main() {
   } else {
     for (const name of scriptNames) {
       if (!validScripts.includes(name)) {
-        console.error(`Error: Unknown script '${name}'. Must be tracked in git as test-*.js`);
-        process.exit(1);
+        throw new Error(`Error: Unknown script '${name}'. Must be tracked in git as test-*.js`);
       }
     }
   }
@@ -101,16 +101,18 @@ async function main() {
   let compareFailed = false;
   
   const healthTimeoutMs = process.env.BASELINE_HEALTH_TIMEOUT_MS ? parseInt(process.env.BASELINE_HEALTH_TIMEOUT_MS, 10) : 60000;
+  const scriptTimeoutMs = process.env.BASELINE_SCRIPT_TIMEOUT_MS ? parseInt(process.env.BASELINE_SCRIPT_TIMEOUT_MS, 10) : 120000;
 
   let tmpDir = null;
   if (compareMode) {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'baseline-'));
   }
 
+  const rawResultsMap = [];
+
   try {
     for (const script of scriptNames) {
       const scriptResults = [];
-      let scriptClassification = 'NOT RUNNABLE';
       const outputs = [];
       
       for (let r = 1; r <= runs; r++) {
@@ -123,16 +125,19 @@ async function main() {
             throw new Error(`Guard failed inside transaction: Expected eventcore_test_legacy, got ${dbCheck[0].db}`);
           }
           await tx.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0;`);
-          const tables = await tx.$queryRaw`
-            SELECT TABLE_NAME 
-            FROM information_schema.tables 
-            WHERE table_schema = DATABASE();
-          `;
-          for (const { TABLE_NAME } of tables) {
-            await tx.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${TABLE_NAME}\`;`);
+          try {
+            const tables = await tx.$queryRaw`
+              SELECT TABLE_NAME 
+              FROM information_schema.tables 
+              WHERE table_schema = DATABASE();
+            `;
+            for (const { TABLE_NAME } of tables) {
+              await tx.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${TABLE_NAME}\`;`);
+            }
+          } finally {
+            await tx.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1;`);
           }
-          await tx.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1;`);
-        });
+        }, { maxWait: 10000, timeout: 60000 });
 
         console.log('Migrating and seeding...');
         execSync('npx prisma migrate deploy', { cwd: scriptsDir, stdio: 'ignore' });
@@ -142,26 +147,39 @@ async function main() {
         const env = { ...process.env, JOBS_SECRET: secret };
 
         try {
-          execSync('netstat -ano | findstr /R /C:":4000 " | findstr LISTENING');
-          console.error('Error: Port 4000 is not free before starting the server.');
-          process.exit(1);
-        } catch (e) {}
+          execSync('netstat -ano | findstr :4000 | findstr LISTENING');
+          throw new Error('Error: Port 4000 is not free before starting the server.');
+        } catch (e) {
+          if (e.message.includes('Port 4000 is not free')) throw e;
+        }
 
         console.log('Starting server...');
-        const serverProcess = spawn('npx.cmd', ['tsx', 'src/index.ts'], { cwd: scriptsDir, env, shell: true });
+        const serverLogFile = path.join(perRunLogsDir, `server.${script}.run${r}.log`);
+        const outFd = openSync(serverLogFile, 'w');
+        const serverProcess = spawn('npx.cmd', ['tsx', 'src/index.ts'], { cwd: scriptsDir, env, shell: true, stdio: ['ignore', outFd, outFd] });
+        serverProcess.unref();
+        closeSync(outFd);
         
         try {
           await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Server start timeout')), healthTimeoutMs);
+            let pollTimer;
+            let currentReq;
+            const timeout = setTimeout(() => {
+              clearTimeout(pollTimer);
+              if (currentReq) currentReq.destroy();
+              reject(new Error(`Server start timeout at line 155`));
+            }, healthTimeoutMs);
             const poll = () => {
-              http.get('http://localhost:4000/api/health', (res) => {
+              currentReq = http.get('http://localhost:4000/api/health', (res) => {
                 if (res.statusCode === 200) {
+                  res.resume();
                   clearTimeout(timeout);
                   resolve();
                 } else {
-                  setTimeout(poll, 500);
+                  res.resume();
+                  pollTimer = setTimeout(poll, 500);
                 }
-              }).on('error', () => setTimeout(poll, 500));
+              }).on('error', () => { pollTimer = setTimeout(poll, 500); });
             };
             poll();
           });
@@ -171,11 +189,16 @@ async function main() {
           let exitCode = 0;
           let output = '';
           try {
-            const out = execSync(`node ${script}`, { cwd: scriptsDir, env, stdio: 'pipe' });
+            const out = execSync(`node ${script}`, { cwd: scriptsDir, env, stdio: 'pipe', timeout: scriptTimeoutMs, maxBuffer: 16 * 1024 * 1024 });
             output = out.toString();
           } catch (e) {
-            exitCode = e.status || 1;
-            output = (e.stdout ? e.stdout.toString() : '') + (e.stderr ? e.stderr.toString() : '');
+            if (e.code === 'ETIMEDOUT' || (e.signal === 'SIGTERM')) {
+              exitCode = -1;
+              output = 'TIMEOUT';
+            } else {
+              exitCode = e.status || 1;
+              output = (e.stdout ? e.stdout.toString() : '') + (e.stderr ? e.stderr.toString() : '');
+            }
           }
 
           const normalized = normalize(output);
@@ -189,38 +212,52 @@ async function main() {
           try {
             execSync(`taskkill /PID ${serverProcess.pid} /T /F`, { stdio: 'ignore' });
           } catch (e) {}
+          try { serverProcess.kill('SIGKILL'); } catch (e) {}
 
           await new Promise(resolve => setTimeout(resolve, 2000));
           try {
-            execSync('netstat -ano | findstr /R /C:":4000 " | findstr LISTENING');
-            console.error('Error: Port 4000 is still in use (LISTENING) after stopping server.');
-            process.exit(1);
-          } catch (e) {}
+            execSync('netstat -ano | findstr :4000 | findstr LISTENING');
+            throw new Error('Error: Port 4000 is still in use (LISTENING) after stopping server.');
+          } catch (e) {
+            if (e.message.includes('Port 4000 is still in use')) throw e;
+          }
         }
       }
 
-      const allExit0 = outputs.every(o => o.exitCode === 0);
-      const allFail = outputs.every(o => o.exitCode !== 0);
-      const allIdentical = outputs.every(o => o.normalized === outputs[0].normalized);
-
-      if (outputs.length > 0) {
-        if (script === 'test-concurrency.js') {
-          scriptClassification = 'RACE-DEPENDENT';
-        } else if (allExit0 && allIdentical) {
-          scriptClassification = 'DETERMINISTIC';
-        } else if (allFail && allIdentical) {
-          scriptClassification = 'FAIL';
-        } else {
-          scriptClassification = 'FLAKY';
-        }
-      }
-
-      results.push({ script, classification: scriptClassification, exitCodes: scriptResults.join(',') });
+      const scriptClassification = classify(script, outputs);
+      rawResultsMap.push({ script, classification: scriptClassification, outputs });
+      results.push({ script, classification: scriptClassification, runs, exitCodes: scriptResults.join(',') });
       console.log(`Classification for ${script}: ${scriptClassification}`);
+    }
 
-      const isAllowlisted = knownFailures.hasOwnProperty(script);
+    const isAllowlistedFn = (script) => knownFailures.hasOwnProperty(script);
 
-      if (scriptClassification === 'DETERMINISTIC') {
+    let writeSafe = false;
+    if (updateReference) {
+      const validation = validateReferenceUpdate(rawResultsMap, knownFailures, runs);
+      if (!validation.safe) {
+        console.error(`\nError: Refusing to update references. Reasons:\n- ${validation.reasons.join('\n- ')}`);
+        process.exitCode = 1;
+        return; // Early return to skip writing, finally block will run
+      }
+      writeSafe = true;
+    }
+
+    for (const r of rawResultsMap) {
+      const { script, classification, outputs } = r;
+      const isAllowlisted = isAllowlistedFn(script);
+      
+      if (classification === 'TIMEOUT') {
+        console.error(`TIMEOUT DETECTED for ${script}. Exceeded ${scriptTimeoutMs}ms.`);
+        if (compareMode) {
+          compareFailed = true;
+        }
+        if (writeSafe) {
+          cleanupStaleFiles(script, classification, logsDir);
+          if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
+          writeFileSync(path.join(logsDir, 'evidence', `${script}.timeout.log`), `TIMEOUT after ${scriptTimeoutMs}ms`);
+        }
+      } else if (classification === 'DETERMINISTIC') {
         const logPath = path.join(logsDir, `${script}.log`);
         if (compareMode) {
           if (isAllowlisted) {
@@ -244,15 +281,17 @@ async function main() {
               }
             }
           }
-        } else if (updateReference) {
+        } else if (writeSafe) {
+          cleanupStaleFiles(script, classification, logsDir);
           writeFileSync(logPath, outputs[0].normalized);
           console.log(`Saved reference log to ${logPath}`);
         }
-      } else if (scriptClassification === 'RACE-DEPENDENT') {
+      } else if (classification === 'RACE-DEPENDENT') {
         console.log(`RACE-DEPENDENT script ${script}.`);
         if (compareMode) {
           console.log(`Compare mode: Skipping RACE-DEPENDENT script ${script}`);
-        } else if (updateReference) {
+        } else if (writeSafe) {
+          cleanupStaleFiles(script, classification, logsDir);
           if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
           const distinct = {};
           for (const o of outputs) {
@@ -266,22 +305,24 @@ async function main() {
           }
           writeFileSync(path.join(logsDir, 'evidence', `${script}.race-outcomes.md`), raceLog);
         }
-      } else if (scriptClassification === 'FLAKY') {
+      } else if (classification === 'FLAKY') {
         console.log(`FLAKY DETECTED for ${script}.`);
         if (compareMode && !isAllowlisted) compareFailed = true;
         if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
         
-        if (updateReference) {
+        if (writeSafe) {
+          cleanupStaleFiles(script, classification, logsDir);
           if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
           writeFileSync(path.join(logsDir, 'evidence', `${script}.flaky.log`), outputs.map((o,i) => `--- Run ${i+1} ---\n${o.normalized}`).join('\n\n'));
         }
-      } else if (scriptClassification === 'FAIL') {
+      } else if (classification === 'FAIL') {
         if (compareMode && !isAllowlisted) {
           console.error(`Error: Non-allowlisted script ${script} failed.`);
           compareFailed = true;
         }
         if (isAllowlisted) console.log(`KNOWN FAIL (allowlisted)`);
-        if (updateReference) {
+        if (writeSafe) {
+          cleanupStaleFiles(script, classification, logsDir);
           if (!existsSync(path.join(logsDir, 'evidence'))) mkdirSync(path.join(logsDir, 'evidence'), { recursive: true });
           writeFileSync(path.join(logsDir, 'evidence', `${script}.fail.log`), outputs[0].raw);
         }
@@ -291,7 +332,7 @@ async function main() {
     console.log('\n=== Final Results ===');
     console.table(results);
     
-    if (updateReference) {
+    if (writeSafe) {
       console.log('\n=== Reference Updates ===');
       try {
         execSync('git diff --stat -- docs/baseline-logs', { stdio: 'inherit', cwd: rootDir });
@@ -299,7 +340,7 @@ async function main() {
     }
 
     if (compareMode && compareFailed) {
-      process.exit(1);
+      process.exitCode = 1;
     }
   } finally {
     if (tmpDir) {
@@ -309,7 +350,7 @@ async function main() {
   }
 }
 
-main().catch(e => {
+main().then(() => console.log('MAIN EXITED')).catch(e => {
   console.error(e);
-  process.exit(1);
+  process.exitCode = 1;
 });

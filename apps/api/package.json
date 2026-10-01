@@ -12,7 +12,7 @@
     "test": "vitest run",
     "baseline:legacy": "node scripts/run-legacy-baseline.mjs",
     "baseline:compare": "node scripts/run-legacy-baseline.mjs --compare",
-    "baseline:update-reference": "node scripts/run-legacy-baseline.mjs --update-reference",
+    "baseline:update-reference": "node scripts/run-legacy-baseline.mjs --update-reference --runs 3",
     "baseline:scan": "node scripts/check-expected-lines.mjs"
   },
   "dependencies": {
