@@ -6,7 +6,7 @@ import path from 'path';
  * Classifies a script based on its outputs.
  * @param {string} script 
  * @param {Array<{exitCode: number, normalized: string, raw: string}>} outputs 
- * @returns {string} Classification: 'RACE-DEPENDENT', 'DETERMINISTIC', 'FAIL', 'FLAKY', or 'TIMEOUT'
+ * @returns {string} Classification: 'RACE-DEPENDENT', 'DETERMINISTIC', 'FAIL', 'FLAKY', 'TIMEOUT', or 'NOT RUNNABLE'
  */
 export function classify(script, outputs) {
   if (outputs.length === 0) return 'NOT RUNNABLE';
@@ -37,16 +37,27 @@ export function classify(script, outputs) {
  * @returns {{safe: boolean, reasons: string[]}}
  */
 export function validateReferenceUpdate(results, allowlist, requestedRuns) {
+  const reasons = [];
+  
   if (requestedRuns < 3) {
-    return { safe: false, reasons: [`Requested runs (${requestedRuns}) < 3. Reference update requires at least 3 runs.`] };
+    reasons.push(`Requested runs (${requestedRuns}) < 3. Reference update requires at least 3 runs.`);
   }
 
-  const reasons = [];
   for (const r of results) {
     const isAllowlisted = Object.prototype.hasOwnProperty.call(allowlist, r.script);
-    if (!isAllowlisted && (r.classification === 'FLAKY' || r.classification === 'TIMEOUT')) {
-      reasons.push(`Non-allowlisted script ${r.script} is ${r.classification}.`);
+    
+    if (r.classification === 'NOT RUNNABLE' || r.classification === 'TIMEOUT') {
+      reasons.push(`Script ${r.script} is ${r.classification}.`);
     }
+    
+    if (r.outputs.length < requestedRuns) {
+      reasons.push(`Script ${r.script} has fewer runs (${r.outputs.length}) than requested (${requestedRuns}).`);
+    }
+
+    if (!isAllowlisted && r.classification === 'FLAKY') {
+      reasons.push(`Non-allowlisted script ${r.script} is FLAKY.`);
+    }
+    
     if (r.classification === 'DETERMINISTIC') {
       const allIdentical = r.outputs.every(o => o.normalized === r.outputs[0].normalized);
       if (!allIdentical) {
@@ -92,4 +103,35 @@ export function cleanupStaleFiles(script, classification, logsDir) {
       // Ignore cleanup errors
     }
   }
+}
+
+/**
+ * Checks if a port is in the LISTENING state from netstat output.
+ * @param {string} netstatText 
+ * @param {number} port 
+ * @returns {boolean}
+ */
+export function isPortListening(netstatText, port) {
+  const lines = netstatText.split('\n');
+  const regex = new RegExp(`:${port}\\b\\s+.*LISTENING`, 'i');
+  for (const line of lines) {
+    if (regex.test(line)) return true;
+  }
+  return false;
+}
+
+/**
+ * Normalizes output logs to remove timestamps, UUIDs, etc.
+ * @param {string} text 
+ * @returns {string}
+ */
+export function normalize(text) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/c[a-z0-9]{24}/g, '<ID>')
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<TS>')
+    .replace(/\b\d+ms\b/g, '<MS>')
+    .replace(/eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+/g, '<TOKEN>')
+    .replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/g, '<UUID>')
+    .replace(/[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4} \([^)]+\)/g, '<TS>');
 }
