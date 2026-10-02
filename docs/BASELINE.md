@@ -26,17 +26,21 @@ The login endpoint imposes a strict rate limit (`windowMs: 15 * 60 * 1000, max: 
 - **Allowlist (`docs/baseline-known-failures.json`)**: Tracks scripts that fail deterministically due to known bugs. Failures here do not fail the CI gate (they print "KNOWN FAIL (allowlisted)"). If an allowlisted script magically passes (exit 0), the gate prints a notice but does not fail.
 - **Exit Code Rules (`baseline:compare`)**: The process exits non-zero if a script is `NOT RUNNABLE`, `TIMEOUT`, mismatched, or if a `FAIL`/`FLAKY` script is not on the allowlist. Mismatch diffs use a temporary directory in `%TEMP%` that is strictly cleaned up on all exits.
 - **Update Refusal**: `--update-reference` strictly refuses to write any references if: requested runs are < 3, any script is `NOT RUNNABLE` or `TIMEOUT`, or any non-allowlisted script is `FLAKY`, or if output mismatches across runs for `DETERMINISTIC` scripts.
-- **Allowlisted Updates**: For an allowlisted script, `--update-reference` must never write or delete a root reference log, and must never delete its evidence/*.fail.log; if it is not FAIL in that update, print Notice: allowlisted <script> was <classification>; references untouched and write nothing for it. Non-allowlisted scripts behave normally.
-- **Scan Scope**: `baseline:scan` only checks logs directly inside `docs/baseline-logs`.
+- **Allowlisted Updates**: For an allowlisted script, `--update-reference` must never write or delete a root reference log, and must never delete its evidence/*.fail.log; if it is not FAIL in that update, print Notice: allowlisted `<script>` was `<classification>`; references untouched and write nothing for it. Non-allowlisted scripts behave normally.
+- **Scan Scope**: `baseline:scan` only checks logs directly inside `docs/baseline-logs` (which correspond to `DETERMINISTIC` scripts). It ignores logs in `evidence/` unless `--include-evidence` is passed. Scanning requires `CRLF` normalized to `LF` before matching and exits 1 if 0 expected-lines rows are found.
 - **RACE-DEPENDENT**: Scripts whose output varies purely based on race conditions (e.g. concurrent HTTP requests) without any normalization gaps. They are excluded from `baseline:compare` checks. Their race outcomes are recorded in `evidence/`.
+
+**Classification Authority:** A classification is authoritative ONLY when it comes from a 3-run `update-reference`. A 1-run `compare` (`--runs 1`, default) can only detect mismatches against the reference, not flakiness.
+
+**Known limitations:** FAIL evidence logs are raw output and churn between runs; `race-outcomes.md` count comes from the earlier 10-run experiment (commit `38ab5b6`).
 
 ## Feature Acceptance Checklist
 To accept a feature or fix, the following sequence must pass strictly sequentially:
 1. `git status --porcelain` (Expected: empty)
-2. `pnpm --filter api test` (Expected: 16 of 16 tests pass)
+2. `pnpm --filter api test` (Expected: all tests pass (update the expected count when tests are added))
 3. `pnpm --filter api baseline:compare` (Expected: exit code 0)
-4. `pnpm --filter api test` (Expected: 16 of 16 tests pass, verifying DB state is preserved)
-5. `pnpm --filter api baseline:scan` (Expected: exit code 0, no output/mismatches)
+4. `pnpm --filter api test` (Expected: all tests pass (update the expected count when tests are added), verifying DB state is preserved)
+5. `pnpm --filter api baseline:scan` (Expected: exit code 0 and no FAIL rows in the printed table)
 6. `pnpm --filter api exec tsc --noEmit` (Expected: exit code 0)
 
 ## Open questions
