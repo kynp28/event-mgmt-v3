@@ -15,6 +15,7 @@ export async function clearDb() {
     db.event.deleteMany(),
     db.auditLog.deleteMany(),
     db.organizerProfile.deleteMany(),
+    db.vendorProfile.deleteMany(),
     db.user.deleteMany()
   ]);
 }
