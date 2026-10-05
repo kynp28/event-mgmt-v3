@@ -234,8 +234,8 @@ model VendorProfile {
   id          String   @id @default(cuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  storeName   String
-  productType String
+  storeName   String   @db.VarChar(100)
+  productType String   @db.VarChar(100)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

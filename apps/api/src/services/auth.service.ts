@@ -61,11 +61,12 @@ export class AuthService {
         include: { vendorProfile: true }
       });
 
+      const { password, ...userWithoutPassword } = user;
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
-      return { token, user };
+      return { token, user: userWithoutPassword };
     } catch (err: any) {
       if (err.code === "P2002") {
-        throw new AppError(400, "EMAIL_IN_USE", "Email is already in use");
+        throw new AppError(409, "CONFLICT", "Registration could not be completed");
       }
       throw err;
     }

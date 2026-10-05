@@ -18,8 +18,9 @@ export const updateProfile = async (req: Request, res: Response, next: NextFunct
       return res.status(400).json({ error: { code: "BAD_REQUEST", message: "Invalid input", details: parsed.error.format() } });
     }
 
-    const profile = await VendorService.updateProfile(req.user!.id, parsed.data);
-    res.json({ message: "Profile updated successfully", profile });
+    const { profile, isNew } = await VendorService.upsertProfile(req.user!.id, parsed.data);
+    const status = isNew ? 201 : 200;
+    res.status(status).json({ message: "Profile updated successfully", profile });
   } catch (error: any) {
     next(error);
   }

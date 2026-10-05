@@ -19,8 +19,12 @@ import { requireJobsSecret } from "./middlewares/jobs.middleware";
 import { AppError } from "./utils/AppError";
 
 export interface AppOptions {
-  // We can add options here, e.g., to override rate limiters
+  loginRateLimit?: { windowMs?: number; max?: number } | false;
+  registerRateLimit?: { windowMs?: number; max?: number } | false;
 }
+
+const DEFAULT_LOGIN_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 };
+const DEFAULT_REGISTER_LIMIT = { windowMs: 60 * 60 * 1000, max: 10 }; // 10 requests / 1 hour
 
 export function createApp(options?: AppOptions) {
   const app = express();
@@ -33,17 +37,21 @@ export function createApp(options?: AppOptions) {
   app.use(express.json({ limit: "3mb" }));
   app.use(cookieParser());
 
-  const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many login attempts, please try again later" } }
-  });
+  const loginLimiter = options?.loginRateLimit === false 
+    ? (req: any, res: any, next: any) => next()
+    : rateLimit({
+        windowMs: options?.loginRateLimit?.windowMs || DEFAULT_LOGIN_LIMIT.windowMs,
+        max: options?.loginRateLimit?.max || DEFAULT_LOGIN_LIMIT.max,
+        message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many login attempts, please try again later" } }
+      });
 
-  const registerLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10,
-    message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many registration attempts, please try again later" } }
-  });
+  const registerLimiter = options?.registerRateLimit === false
+    ? (req: any, res: any, next: any) => next()
+    : rateLimit({
+        windowMs: options?.registerRateLimit?.windowMs || DEFAULT_REGISTER_LIMIT.windowMs,
+        max: options?.registerRateLimit?.max || DEFAULT_REGISTER_LIMIT.max,
+        message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many registration attempts, please try again later" } }
+      });
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });

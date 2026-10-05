@@ -8,25 +8,45 @@ export class VendorService {
       where: { userId },
     });
     if (!profile) {
-      throw new AppError(404, "PROFILE_NOT_FOUND", "Vendor profile not found");
+      throw new AppError(404, "VENDOR_PROFILE_NOT_FOUND", "Vendor profile not found");
     }
     return profile;
   }
 
-  static async updateProfile(userId: string, data: UpdateVendorProfilePayload) {
-    const profile = await db.vendorProfile.findUnique({
-      where: { userId },
-    });
-    if (!profile) {
-      throw new AppError(404, "PROFILE_NOT_FOUND", "Vendor profile not found");
+  static async upsertProfile(userId: string, data: UpdateVendorProfilePayload): Promise<{ profile: any; isNew: boolean }> {
+    let attempts = 0;
+    while (attempts < 3) {
+      attempts++;
+      try {
+        const profile = await db.vendorProfile.create({
+          data: {
+            userId,
+            storeName: data.storeName,
+            productType: data.productType,
+          },
+        });
+        return { profile, isNew: true };
+      } catch (err: any) {
+        if (err.code === "P2002" || err.code === "P2034") {
+          try {
+            const profile = await db.vendorProfile.update({
+              where: { userId },
+              data: {
+                storeName: data.storeName,
+                productType: data.productType,
+              },
+            });
+            return { profile, isNew: false };
+          } catch (updateErr: any) {
+            if ((updateErr.code === "P2025" || updateErr.code === "P2034") && attempts < 3) {
+              continue;
+            }
+            throw new AppError(500, "INTERNAL_ERROR", "Failed to update vendor profile");
+          }
+        }
+        throw new AppError(500, "INTERNAL_ERROR", "Failed to create vendor profile");
+      }
     }
-
-    return db.vendorProfile.update({
-      where: { userId },
-      data: {
-        ...(data.storeName && { storeName: data.storeName }),
-        ...(data.productType && { productType: data.productType }),
-      },
-    });
+    throw new AppError(500, "INTERNAL_ERROR", "Max attempts reached for upserting profile");
   }
 }
