@@ -165,3 +165,20 @@ export const updateBoothPositionsSchema = z.object({
   }))
 });
 export type UpdateBoothPositionsPayload = z.infer<typeof updateBoothPositionsSchema>;
+
+export const registerVendorSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .refine((val) => new TextEncoder().encode(val).length <= 72, "Password exceeds maximum length of 72 bytes"),
+  name: z.string().optional().nullable(),
+  storeName: z.string().min(1, "Store name is required"),
+  productType: z.string().min(1, "Product type is required"),
+});
+export type RegisterVendorPayload = z.infer<typeof registerVendorSchema>;
+
+export const updateVendorProfileSchema = z.object({
+  storeName: z.string().min(1, "Store name is required").optional(),
+  productType: z.string().min(1, "Product type is required").optional(),
+});
+export type UpdateVendorProfilePayload = z.infer<typeof updateVendorProfileSchema>;

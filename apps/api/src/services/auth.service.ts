@@ -40,4 +40,34 @@ export class AuthService {
 
     return { token, user };
   }
+
+  static async registerVendor(data: import("@eventcore/shared").RegisterVendorPayload) {
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    try {
+      const user = await db.user.create({
+        data: {
+          email: data.email,
+          password: hashedPassword,
+          name: data.name,
+          role: "VENDOR",
+          vendorProfile: {
+            create: {
+              storeName: data.storeName,
+              productType: data.productType,
+            },
+          },
+        },
+        include: { vendorProfile: true }
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
+      return { token, user };
+    } catch (err: any) {
+      if (err.code === "P2002") {
+        throw new AppError(400, "EMAIL_IN_USE", "Email is already in use");
+      }
+      throw err;
+    }
+  }
 }
