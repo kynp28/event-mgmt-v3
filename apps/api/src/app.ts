@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
-import { login, logout, getMe } from "./controllers/auth.controller";
+import { login, logout, getMe, registerVendor } from "./controllers/auth.controller";
 import { requireAuth } from "./middlewares/auth.middleware";
 
 import * as adminController from "./controllers/admin.controller";
@@ -14,6 +14,7 @@ import * as boothController from "./controllers/booth.controller";
 import * as bookingController from "./controllers/booking.controller";
 import * as paymentController from "./controllers/payment.controller";
 import * as ticketController from "./controllers/ticket.controller";
+import * as vendorController from "./controllers/vendor.controller";
 import { requireJobsSecret } from "./middlewares/jobs.middleware";
 import { AppError } from "./utils/AppError";
 
@@ -38,11 +39,18 @@ export function createApp(options?: AppOptions) {
     message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many login attempts, please try again later" } }
   });
 
+  const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10,
+    message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many registration attempts, please try again later" } }
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
 
   app.post("/api/auth/login", loginLimiter, login);
+  app.post("/api/auth/register/vendor", registerLimiter, registerVendor);
   app.post("/api/auth/logout", logout);
   app.get("/api/auth/me", requireAuth, getMe);
 
@@ -86,6 +94,8 @@ export function createApp(options?: AppOptions) {
 
   // Vendor Routes
   const isVendor = [requireAuth, requireRole(["VENDOR"])];
+  app.get("/api/vendor/profile", isVendor, vendorController.getProfile);
+  app.put("/api/vendor/profile", isVendor, vendorController.updateProfile);
   app.get("/api/vendor/bookings", isVendor, bookingController.getMyBookings);
   app.post("/api/vendor/bookings", isVendor, bookingController.createBooking);
   app.post("/api/vendor/bookings/:bookingId/payments", isVendor, paymentController.uploadSlip);
