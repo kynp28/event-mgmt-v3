@@ -5,6 +5,15 @@ import { LoginPayload } from "@eventcore/shared";
 import { AppError } from "../utils/AppError";
 
 export class AuthService {
+  static toUserDto(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    };
+  }
+
   static async login(data: LoginPayload) {
     const user = await db.user.findUnique({
       where: { email: data.email },
@@ -38,7 +47,7 @@ export class AuthService {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
 
-    return { token, user };
+    return { token, user: AuthService.toUserDto(user) };
   }
 
   static async registerVendor(data: import("@eventcore/shared").RegisterVendorPayload) {
