@@ -46,19 +46,17 @@ Any transaction that performs several conditional updates must **throw and roll 
 
 ## A. สมัครสมาชิกผู้ค้า (Vendor Register)
 - **Schema:**
-  - สร้างโมเดล `VendorProfile` (`id`, `userId` @unique, `storeName`, `productType`, `createdAt`, `updatedAt`) เชื่อมกับ `User`
+  - สร้างโมเดล `VendorProfile` (`id`, `userId` @unique, `storeName`, `productType`, `createdAt`, `updatedAt`) เชื่อมกับ `User` โดยให้คอลัมน์ `storeName` และ `productType` เป็น `VarChar(100)` (ผ่าน 2 migrations)
 - **Endpoints:**
-  - `POST /api/auth/register/vendor` (Public): สร้าง User (Role=VENDOR เสมอ) และ VendorProfile ทำการ Hash password และมี Rate limit
-  - `PUT /api/vendor/profile` (Vendor): แก้ไขข้อมูล `storeName`, `productType`
-  - `GET /api/vendor/profile` (Vendor): ดูข้อมูล Profile ของตัวเอง
+  - `POST /api/auth/register/vendor` (Public): สร้าง User (Role=VENDOR เสมอ) ด้วย atomic nested create พร้อมกับ VendorProfile, Hash รหัสผ่านด้วย bcrypt, ตรวจสอบรหัสผ่านขั้นต่ำ 8 ตัวอักษรและสูงสุด 72 UTF-8 bytes หากสมัครด้วยอีเมลที่ซ้ำจะตอบ 409 CONFLICT ด้วยข้อความแบบ generic กำหนด Rate limit การสมัครไว้ที่ 10/hour/IP ผ่าน named constant และ response ข้อมูลผู้ใช้งานที่ส่งกลับจะต้องไม่มีรหัสผ่าน (password hash)
+  - `GET /api/vendor/profile` (Vendor): ดูข้อมูล Profile ของตัวเอง (หากไม่มีข้อมูลจะตอบ 404 พร้อมรหัส `VENDOR_PROFILE_NOT_FOUND`)
+  - `PUT /api/vendor/profile` (Vendor): แกัไขข้อมูล `storeName` และ `productType` (บังคับส่งทั้ง 2 ค่าแบบ strict body) โดยทำงานแบบ Upsert (ลอง create ก่อน หากเกิด P2002/P2034 จะวนลูป retry เป็น update แทน สูงสุด 3 ครั้ง) สำเร็จจะได้ 201 สำหรับการสร้างใหม่ หรือ 200 สำหรับการอัปเดต
+- **ฟังก์ชันภายใน:** ฟังก์ชัน `createApp(options)` ถูกแก้ไขให้รับพารามิเตอร์จำกัด Rate limit แบบ override ได้สำหรับ login/register และ Vendor ในข้อมูล Seed เดิมจะถูกเจตนาปล่อยให้ไม่มี `VendorProfile`
 - **การเปลี่ยนสถานะ:** ไม่มี
-- **Concurrency & Prevention:** อีเมลซ้ำป้องกันด้วย `@unique` ในตาราง `User` หากเกิด P2002 ให้คืนค่าแจ้งเตือนแบบไม่เจาะจง
+- **Concurrency & Prevention:** ป้องกัน Upsert Race condition ผ่านการทำ Retry loop ที่ไม่ให้ P2002/P2034 หลุดไปหาผู้ใช้
 - **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** ไม่มี
 - **Tests ที่จะเขียนเพิ่ม:**
-  - สมัครสำเร็จ ได้ token และ profile ถูกสร้าง
-  - ป้องกันการสมัครอีเมลซ้ำ (ข้อมูลไม่รั่วไหล)
-  - Validation failures ผ่าน Zod
-  - แก้ไขข้อมูล profile สำเร็จและปฏิเสธหากไม่มีสิทธิ์
+  - ทดสอบใหม่เพิ่มขึ้นจนรวมเป็น 30 tests ซึ่งครอบคลุม Rate Limiting, Access Control, Unknown keys, Lifecycle, Upsert Concurrency 20 parallel และ Password Limits
 - **Test เดิมที่ต้องยังผ่าน:** `node apps/api/test-auth.js`
 - **Web:** หน้า `/auth/register` (โหมดผู้ค้า), หน้า `/vendor/profile` (ฟอร์มแก้ไขข้อมูล)
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
@@ -66,7 +64,7 @@ Any transaction that performs several conditional updates must **throw and roll 
 ## B. หน้าสาธารณะสำหรับผู้เข้าชม
 - **Schema:** ไม่มี
 - **Endpoints:**
-  - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) หากเป็น Authenticated (Vendor/Organizer) จะคืนฟิลด์เดิมครบถ้วน หากเป็น Anonymous คืนค่า DTO ที่มีแค่ `storeName`, `productType` สำหรับบูธที่ `CONFIRMED` ซ่อนข้อมูลชื่อ-อีเมลจริง
+  - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) หากเป็น Authenticated (Vendor/Organizer) จะคืนฟิลด์เดิมครบถ้วน หากเป็น Anonymous คืนค่า DTO ที่มีแค่ `storeName`, `productType` สำหรับบูธที่ `CONFIRMED` ซ่อนข้อมูลชื่อ-อีเมลจริง *(หมายเหตุ: Public booth DTO ต้องรองรับกรณีที่ผู้ค้าอาจยังไม่มี VendorProfile โดยยอมให้ storeName และ productType มีค่าเป็น null ได้ และฝั่ง UI จะต้องแสดงป้ายกำกับกลางแทนที่จะพัง)*
   - `GET /api/events` (Public): คืนค่ารายการอีเวนต์ทุกสถานะยกเว้น `DRAFT`
   - `GET /api/events/:id` (Public): ดูรายละเอียดงานและผังพื้นที่ หากเป็น `DRAFT` คืน 404
 - **การเปลี่ยนสถานะ:** ไม่มี
@@ -191,3 +189,6 @@ Any transaction that performs several conditional updates must **throw and roll 
   - `state-transitions.test.ts` (ข้อมูล Seed เดิมใน `apps/api/tests/helpers.ts:48` สร้าง Event เป็น `PUBLISHED` อยู่แล้วจึงไม่กระทบกฎใหม่ที่ว่าต้องสร้าง Booking ตอนเป็น `PUBLISHED` เท่านั้น)
   - หมายเหตุ: ปัจจุบันไม่มี Test เดิมที่ครอบคลุมถึง Event Status Transitions (`test-transitions.js` เดิมเป็นการทดสอบ Organizer Approval ไม่ใช่ Event Status)
 - **Quality Requirements Coverage:** ข้อ 5
+
+## Backlog (ยังไม่อยู่ใน Scope ของ A1)
+- **Auth:** ปัจจุบัน Endpoint `POST /api/auth/login` ส่งกลับ object ผู้ใช้งานแบบเต็ม (รวมถึง `password` hash) จะต้องทำการแก้ไขลบฟิลด์นี้ออกใน Task แยกต่างหาก
