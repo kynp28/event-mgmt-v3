@@ -18,12 +18,14 @@ export function translateApiError(err: unknown, context: "register" | "profile")
   if (err instanceof ApiError) {
     if (context === "register") {
       if (err.status === 409) return "ไม่สามารถสมัครด้วยข้อมูลนี้ได้ กรุณาตรวจสอบข้อมูล หรือเข้าสู่ระบบหากมีบัญชีอยู่แล้ว";
-      if (err.status === 429) return "ส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่";
-      if (err.status === 400) return "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่";
     } else if (context === "profile") {
       if (err.status === 403) return "หน้านี้สำหรับบัญชีผู้ค้าเท่านั้น";
-      if (err.status === 400) return "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่";
     }
+    
+    if (err.status === 429) return "ส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่";
+    if (err.status === 400) return "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่";
+    
+    return "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง";
   }
   
   return "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง";

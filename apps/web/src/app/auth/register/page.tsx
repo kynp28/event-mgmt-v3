@@ -28,22 +28,16 @@ export default function RegisterVendorPage() {
   const onSubmit = async (data: FormValues) => {
     setServerError(null);
     try {
-      const email = data.email.trim();
-      const name = data.name ? data.name.trim() : "";
-      const storeName = data.storeName.trim();
-      const productType = data.productType.trim();
-      const password = data.password; // Do not trim password
-
-      // Build payload exactly as schema expects
+      // Trimmed automatically by setValueAs in register()
       const payload: Record<string, string> = {
-        email,
-        password,
-        storeName,
-        productType
+        email: data.email,
+        password: data.password,
+        storeName: data.storeName,
+        productType: data.productType
       };
       
-      if (name) {
-        payload.name = name;
+      if (data.name) {
+        payload.name = data.name;
       }
 
       await apiFetch("/api/auth/register/vendor", {
@@ -70,14 +64,14 @@ export default function RegisterVendorPage() {
           </div>
         )}
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div>
             <label htmlFor="email" className="block text-xs text-gray-600 uppercase mb-1">อีเมล</label>
             <input 
               id="email"
               type="email"
               autoComplete="email"
-              {...form.register("email")}
+              {...form.register("email", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.email && (
@@ -103,7 +97,7 @@ export default function RegisterVendorPage() {
               id="name"
               type="text"
               autoComplete="name"
-              {...form.register("name")}
+              {...form.register("name", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.name && (
@@ -116,7 +110,7 @@ export default function RegisterVendorPage() {
               id="storeName"
               type="text"
               autoComplete="organization"
-              {...form.register("storeName")}
+              {...form.register("storeName", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.storeName && (
@@ -128,7 +122,7 @@ export default function RegisterVendorPage() {
             <input 
               id="productType"
               type="text"
-              {...form.register("productType")}
+              {...form.register("productType", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.productType && (

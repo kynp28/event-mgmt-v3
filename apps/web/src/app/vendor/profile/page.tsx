@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -29,13 +29,18 @@ export default function VendorProfilePage() {
     defaultValues: { storeName: "", productType: "" },
   });
 
+  const resetRef = useRef(form.reset);
+  useEffect(() => {
+    resetRef.current = form.reset;
+  }, [form.reset]);
+
   useEffect(() => {
     let active = true;
     const loadProfile = async () => {
       try {
         const res = await apiFetch("/api/vendor/profile");
         if (active) {
-          form.reset({
+          resetRef.current({
             storeName: res.profile.storeName,
             productType: res.profile.productType,
           });
@@ -48,34 +53,31 @@ export default function VendorProfilePage() {
             router.push("/login");
             return;
           }
-          if (err.status === 403) {
-            setPageError(translateApiError(err, "profile"));
-            setIs403(true);
-            setLoading(false);
-            return;
-          }
           if (err.status === 404 && err.code === "VENDOR_PROFILE_NOT_FOUND") {
             setNotice("ยังไม่มีข้อมูลร้านค้า กรุณากรอกข้อมูลเพื่อสร้างโปรไฟล์");
-            form.reset({ storeName: "", productType: "" });
+            resetRef.current({ storeName: "", productType: "" });
             setLoading(false);
             return;
           }
         }
-        setPageError("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง");
+        setPageError(translateApiError(err, "profile"));
+        if (err instanceof ApiError && err.status === 403) {
+          setIs403(true);
+        }
         setLoading(false);
       }
     };
     loadProfile();
     return () => { active = false; };
-  }, [router, form]);
+  }, [router]);
 
   const onSubmit = async (data: FormValues) => {
     setServerError(null);
     setSuccessMsg(null);
     try {
       const payload: UpdateVendorProfilePayload = {
-        storeName: data.storeName.trim(),
-        productType: data.productType.trim()
+        storeName: data.storeName,
+        productType: data.productType
       };
 
       await apiFetch("/api/vendor/profile", {
@@ -151,7 +153,7 @@ export default function VendorProfilePage() {
             <input 
               id="storeName"
               type="text"
-              {...form.register("storeName")}
+              {...form.register("storeName", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.storeName && (
@@ -163,7 +165,7 @@ export default function VendorProfilePage() {
             <input 
               id="productType"
               type="text"
-              {...form.register("productType")}
+              {...form.register("productType", { setValueAs: (v) => typeof v === "string" ? v.trim() : v })}
               className="w-full rounded border px-3 py-2"
             />
             {form.formState.errors.productType && (
