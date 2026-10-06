@@ -60,7 +60,7 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Tests ที่จะเขียนเพิ่ม:**
   - ทดสอบทั้งหมด 35 tests โดยมีไฟล์ `vendor-register.test.ts` (14 tests) ซึ่งครอบคลุม Rate Limiting, Access Control, Unknown keys, Lifecycle, Upsert Concurrency 20 parallel และ Password Limits และไฟล์ `auth-login-dto.test.ts` (5 tests) เพื่อป้องกัน Password Leaks
 - **Test เดิมที่ต้องยังผ่าน:** `node apps/api/test-auth.js`
-- **Web:** หน้า `/auth/register` (โหมดผู้ค้า), หน้า `/vendor/profile` (ฟอร์มแก้ไขข้อมูล)
+- **Web:** สร้างหน้า `/auth/register` และ `/vendor/profile` (โหมดผู้ค้า) พร้อมคลาส `ApiError` และ `thai-errors` helper สำหรับแปลข้อความผิดพลาด, เพิ่มลิงก์บนหน้า login และ vendor dashboard. เว็บได้รับการตรวจสอบด้วย lint (ไฟล์ที่สร้าง/แก้ไขใน A2 มี 0 problems; ยังคงมี 3 problems เดิมใน login/page.tsx และ vendor/page.tsx), tsc และ build สำเร็จ การทำงานบนเบราว์เซอร์ถูกทดสอบด้วยตนเองโดยเจ้าของโปรเจกต์เพียงกรณีการสมัครสมาชิกสำเร็จ 1 ครั้ง ส่วนรายการทดสอบ manual อื่นๆ ระบุเป็น NOT TESTED
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
 ## B. หน้าสาธารณะสำหรับผู้เข้าชม
@@ -193,4 +193,7 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Quality Requirements Coverage:** ข้อ 5
 
 ## Backlog (ยังไม่อยู่ใน Scope ของ A1)
+- **Web Localization:** หน้าเดิมยังเป็นภาษาอังกฤษ และ metadata/title ยังคงเป็น "Create Next App" รวมถึง <html lang="en">
+- **API Validation:** API รองรับช่องว่างล้วน (whitespace-only) สำหรับ storeName และ productType (min(1) โดยไม่มี trim) ตอนนี้เว็บมีการ trim ฝั่ง client แล้ว แต่ API ยังไม่ได้ป้องกัน
+- **Web Tests:** ยังไม่มี Web test framework สำหรับการทดสอบอัตโนมัติ
 - **Auth:** [DONE] แก้ไข Endpoint `POST /api/auth/login` โดยสร้าง 4-field DTO เพื่อป้องกันการหลุดของ `password` hash (จากการ Audit พบว่า login เป็นเพียง Endpoint เดียวที่คืนค่าแถว User เต็มๆ ส่วน Endpoint อื่นใช้ `select` คืนค่าเฉพาะฟิลด์ที่ปลอดภัยเท่านั้น)
