@@ -50,13 +50,15 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Endpoints:**
   - `POST /api/auth/register/vendor` (Public): สร้าง User (Role=VENDOR เสมอ) ด้วย atomic nested create พร้อมกับ VendorProfile, Hash รหัสผ่านด้วย bcrypt, ตรวจสอบรหัสผ่านขั้นต่ำ 8 ตัวอักษรและสูงสุด 72 UTF-8 bytes หากสมัครด้วยอีเมลที่ซ้ำจะตอบ 409 CONFLICT ด้วยข้อความแบบ generic กำหนด Rate limit การสมัครไว้ที่ 10/hour/IP ผ่าน named constant และ response ข้อมูลผู้ใช้งานที่ส่งกลับจะต้องไม่มีรหัสผ่าน (password hash)
   - `GET /api/vendor/profile` (Vendor): ดูข้อมูล Profile ของตัวเอง (หากไม่มีข้อมูลจะตอบ 404 พร้อมรหัส `VENDOR_PROFILE_NOT_FOUND`)
-  - `PUT /api/vendor/profile` (Vendor): แกัไขข้อมูล `storeName` และ `productType` (บังคับส่งทั้ง 2 ค่าแบบ strict body) โดยทำงานแบบ Upsert (ลอง create ก่อน หากเกิด P2002/P2034 จะวนลูป retry เป็น update แทน สูงสุด 3 ครั้ง) สำเร็จจะได้ 201 สำหรับการสร้างใหม่ หรือ 200 สำหรับการอัปเดต
-- **ฟังก์ชันภายใน:** ฟังก์ชัน `createApp(options)` ถูกแก้ไขให้รับพารามิเตอร์จำกัด Rate limit แบบ override ได้สำหรับ login/register และ Vendor ในข้อมูล Seed เดิมจะถูกเจตนาปล่อยให้ไม่มี `VendorProfile`
+  - `PUT /api/vendor/profile` (Vendor): แก้ไขข้อมูล `storeName` และ `productType` (บังคับส่งทั้ง 2 ค่าแบบ strict body) โดยทำงานแบบ Upsert (ลอง create ก่อน หากเกิด P2002/P2034 จะวนลูป retry เป็น update แทน สูงสุด 3 ครั้ง) สำเร็จจะได้ 201 สำหรับการสร้างใหม่ หรือ 200 สำหรับการอัปเดต
+- **ฟังก์ชันภายใน:**
+  - ฟังก์ชัน `createApp(options)` ถูกแก้ไขให้รับพารามิเตอร์จำกัด Rate limit แบบ override ได้สำหรับ login/register
+  - Vendor ในข้อมูล Seed เดิมจะถูกเจตนาปล่อยให้ไม่มี `VendorProfile`
 - **การเปลี่ยนสถานะ:** ไม่มี
 - **Concurrency & Prevention:** ป้องกัน Upsert Race condition ผ่านการทำ Retry loop ที่ไม่ให้ P2002/P2034 หลุดไปหาผู้ใช้
 - **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** ไม่มี
 - **Tests ที่จะเขียนเพิ่ม:**
-  - ทดสอบใหม่เพิ่มขึ้นจนรวมเป็น 30 tests ซึ่งครอบคลุม Rate Limiting, Access Control, Unknown keys, Lifecycle, Upsert Concurrency 20 parallel และ Password Limits
+  - ทดสอบทั้งหมด 35 tests โดยมีไฟล์ `vendor-register.test.ts` (14 tests) ซึ่งครอบคลุม Rate Limiting, Access Control, Unknown keys, Lifecycle, Upsert Concurrency 20 parallel และ Password Limits และไฟล์ `auth-login-dto.test.ts` (5 tests) เพื่อป้องกัน Password Leaks
 - **Test เดิมที่ต้องยังผ่าน:** `node apps/api/test-auth.js`
 - **Web:** หน้า `/auth/register` (โหมดผู้ค้า), หน้า `/vendor/profile` (ฟอร์มแก้ไขข้อมูล)
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
@@ -191,4 +193,4 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Quality Requirements Coverage:** ข้อ 5
 
 ## Backlog (ยังไม่อยู่ใน Scope ของ A1)
-- **Auth:** ปัจจุบัน Endpoint `POST /api/auth/login` ส่งกลับ object ผู้ใช้งานแบบเต็ม (รวมถึง `password` hash) จะต้องทำการแก้ไขลบฟิลด์นี้ออกใน Task แยกต่างหาก
+- **Auth:** [DONE] แก้ไข Endpoint `POST /api/auth/login` โดยสร้าง 4-field DTO เพื่อป้องกันการหลุดของ `password` hash (จากการ Audit พบว่า login เป็นเพียง Endpoint เดียวที่คืนค่าแถว User เต็มๆ ส่วน Endpoint อื่นใช้ `select` คืนค่าเฉพาะฟิลด์ที่ปลอดภัยเท่านั้น)
