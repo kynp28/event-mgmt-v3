@@ -5,14 +5,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { registerVendorSchema } from "@eventcore/shared";
-import type { RegisterVendorPayload } from "@eventcore/shared";
 import { apiFetch } from "@/lib/api-client";
 import { translateFieldError, translateApiError } from "@/lib/thai-errors";
 
 type FormValues = {
   email: string;
   password: string;
-  name: string;
+  name?: string | null;
   storeName: string;
   productType: string;
 };
@@ -30,13 +29,13 @@ export default function RegisterVendorPage() {
     setServerError(null);
     try {
       const email = data.email.trim();
-      const name = data.name.trim();
+      const name = data.name ? data.name.trim() : "";
       const storeName = data.storeName.trim();
       const productType = data.productType.trim();
       const password = data.password; // Do not trim password
 
       // Build payload exactly as schema expects
-      const payload: any = {
+      const payload: Record<string, string> = {
         email,
         password,
         storeName,
