@@ -74,6 +74,16 @@ describe("Vendor Registration & Profile (A1)", () => {
     expect(count).toBe(0);
   });
 
+  it("should reject unknown keys on register (extraKey)", async () => {
+    const res = await request(app)
+      .post("/api/auth/register/vendor")
+      .send({ ...validVendorData, extraKey: "should-fail" });
+    
+    expect(res.status).toBe(400);
+    const count = await db.user.count({ where: { email: validVendorData.email } });
+    expect(count).toBe(0);
+  });
+
   it("should prevent duplicate email registration (10 parallel requests)", async () => {
     const promises = Array.from({ length: 10 }).map(() => 
       request(app).post("/api/auth/register/vendor").send(validVendorData)
@@ -103,7 +113,6 @@ describe("Vendor Registration & Profile (A1)", () => {
         password: "short",
         storeName: "A".repeat(101),
         productType: "",
-        extraKey: "should-fail",
       });
 
     expect(res.status).toBe(400);
@@ -114,7 +123,6 @@ describe("Vendor Registration & Profile (A1)", () => {
   });
 
   it("should validate invalid fields on PUT", async () => {
-    // missing storeName, productType over 100, unknown key
     const users = await createTestUsers();
     const token = jwt.sign({ userId: users.vendor.id }, process.env.JWT_SECRET!);
 
@@ -123,7 +131,6 @@ describe("Vendor Registration & Profile (A1)", () => {
       .set("Cookie", `token=${token}`)
       .send({
         productType: "A".repeat(101),
-        extraKey: "should-fail",
       });
 
     expect(res.status).toBe(400);
@@ -131,8 +138,24 @@ describe("Vendor Registration & Profile (A1)", () => {
     expect(res.body.error.details.productType).toBeDefined(); // max 100
   });
 
+  it("should reject unknown keys on PUT (extraKey)", async () => {
+    const users = await createTestUsers();
+    const token = jwt.sign({ userId: users.vendor.id }, process.env.JWT_SECRET!);
+
+    const res = await request(app)
+      .put("/api/vendor/profile")
+      .set("Cookie", `token=${token}`)
+      .send({
+        storeName: "Valid Store",
+        productType: "Valid Product",
+        extraKey: "should-fail"
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it("should handle profile lifecycle (GET 404, PUT 201, GET 200, PUT 200)", async () => {
-    const users = await createTestUsers(); // Note: seeded vendor doesn't have a vendorProfile
+    const users = await createTestUsers();
     const token = jwt.sign({ userId: users.vendor.id }, process.env.JWT_SECRET!);
 
     // 1. GET 404
@@ -187,41 +210,69 @@ describe("Vendor Registration & Profile (A1)", () => {
     const createdCount = statuses.filter(s => s === 201).length;
     const updatedCount = statuses.filter(s => s === 200).length;
     
-    // Everything should be 201 or 200
-    expect(createdCount + updatedCount).toBe(20);
+    expect(createdCount).toBe(1);
+    expect(updatedCount).toBe(19);
     
     // Check DB row count
     const profileCount = await db.vendorProfile.count({ where: { userId: users.vendor.id } });
     expect(profileCount).toBe(1);
 
-    console.log(`Parallel PUTs: 201=${createdCount}, 200=${updatedCount}`);
+    console.log(`Parallel PUTs: 201=${createdCount}, 200=${updatedCount}, dbCount=${profileCount}`);
   });
 
-  it("should enforce access control for profile routes", async () => {
+  it("should enforce access control for profile routes correctly between roles and users", async () => {
     const users = await createTestUsers();
-    const vendor2 = await db.user.create({
-      data: { email: "vendor2@test.com", password: "pwd", role: "VENDOR" }
+    // users.vendor is vendor A
+    
+    // Create vendor A's profile
+    await db.vendorProfile.create({
+      data: { userId: users.vendor.id, storeName: "Vendor A Store", productType: "Prod A" }
+    });
+
+    const vendorB = await db.user.create({
+      data: { email: "vendorb@test.com", password: "pwd", role: "VENDOR" }
+    });
+    await db.vendorProfile.create({
+      data: { userId: vendorB.id, storeName: "Vendor B Store", productType: "Prod B" }
     });
 
     const adminToken = jwt.sign({ userId: users.admin.id }, process.env.JWT_SECRET!);
     const orgToken = jwt.sign({ userId: users.org.id }, process.env.JWT_SECRET!);
-    const vendor2Token = jwt.sign({ userId: vendor2.id }, process.env.JWT_SECRET!);
+    const vendorBToken = jwt.sign({ userId: vendorB.id }, process.env.JWT_SECRET!);
 
-    // Unauthenticated -> 401
+    // 1. GET and PUT without cookie -> 401
     expect((await request(app).get("/api/vendor/profile")).status).toBe(401);
     expect((await request(app).put("/api/vendor/profile").send({ storeName: "S", productType: "P" })).status).toBe(401);
 
-    // Admin / Org -> 403
-    expect((await request(app).get("/api/vendor/profile").set("Cookie", `token=${adminToken}`)).status).toBe(403);
-    expect((await request(app).get("/api/vendor/profile").set("Cookie", `token=${orgToken}`)).status).toBe(403);
+    // 2. PUT as ADMIN -> 403
+    expect((await request(app).put("/api/vendor/profile").set("Cookie", `token=${adminToken}`).send({ storeName: "S", productType: "P" })).status).toBe(403);
+    
+    // 3. PUT as ORGANIZER -> 403
+    expect((await request(app).put("/api/vendor/profile").set("Cookie", `token=${orgToken}`).send({ storeName: "S", productType: "P" })).status).toBe(403);
 
-    // Vendor A PUT never changes Vendor B (the userId is derived from token in controller)
+    // Snapshot A
+    const vendorABefore = await db.vendorProfile.findUnique({ where: { userId: users.vendor.id } });
+    expect(vendorABefore).not.toBeNull();
+
+    // 4. PUT as vendor B does not change vendor A
     const putRes = await request(app)
       .put("/api/vendor/profile")
-      .set("Cookie", `token=${vendor2Token}`)
-      .send({ storeName: "Vendor 2 Store", productType: "V2" });
-    expect(putRes.status).toBe(201);
-    expect(putRes.body.profile.userId).toBe(vendor2.id); // Should be vendor 2's ID
+      .set("Cookie", `token=${vendorBToken}`)
+      .send({ storeName: "New B Store", productType: "New B Prod" });
+    expect(putRes.status).toBe(200);
+
+    const vendorAAfter1 = await db.vendorProfile.findUnique({ where: { userId: users.vendor.id } });
+    expect(vendorAAfter1).toEqual(vendorABefore);
+
+    // 5. PUT as vendor B trying to set userId to A's id -> 400 (strict) and A is unchanged
+    const maliciousPut = await request(app)
+      .put("/api/vendor/profile")
+      .set("Cookie", `token=${vendorBToken}`)
+      .send({ storeName: "Malicious Store", productType: "Malicious Prod", userId: users.vendor.id });
+    expect(maliciousPut.status).toBe(400);
+
+    const vendorAAfter2 = await db.vendorProfile.findUnique({ where: { userId: users.vendor.id } });
+    expect(vendorAAfter2).toEqual(vendorABefore);
   });
 });
 

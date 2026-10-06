@@ -40,16 +40,16 @@ export function createApp(options?: AppOptions) {
   const loginLimiter = options?.loginRateLimit === false 
     ? (req: any, res: any, next: any) => next()
     : rateLimit({
-        windowMs: options?.loginRateLimit?.windowMs || DEFAULT_LOGIN_LIMIT.windowMs,
-        max: options?.loginRateLimit?.max || DEFAULT_LOGIN_LIMIT.max,
+        windowMs: options?.loginRateLimit?.windowMs ?? DEFAULT_LOGIN_LIMIT.windowMs,
+        max: options?.loginRateLimit?.max ?? DEFAULT_LOGIN_LIMIT.max,
         message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many login attempts, please try again later" } }
       });
 
   const registerLimiter = options?.registerRateLimit === false
     ? (req: any, res: any, next: any) => next()
     : rateLimit({
-        windowMs: options?.registerRateLimit?.windowMs || DEFAULT_REGISTER_LIMIT.windowMs,
-        max: options?.registerRateLimit?.max || DEFAULT_REGISTER_LIMIT.max,
+        windowMs: options?.registerRateLimit?.windowMs ?? DEFAULT_REGISTER_LIMIT.windowMs,
+        max: options?.registerRateLimit?.max ?? DEFAULT_REGISTER_LIMIT.max,
         message: { error: { code: "TOO_MANY_REQUESTS", message: "Too many registration attempts, please try again later" } }
       });
 

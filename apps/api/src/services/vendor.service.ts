@@ -39,12 +39,16 @@ export class VendorService {
             return { profile, isNew: false };
           } catch (updateErr: any) {
             if ((updateErr.code === "P2025" || updateErr.code === "P2034") && attempts < 3) {
-              continue;
+              continue; // retry
             }
-            throw new AppError(500, "INTERNAL_ERROR", "Failed to update vendor profile");
+            // Do not expose Prisma codes P2002/P2034/P2025 to client on failure
+            if (updateErr.code === "P2025" || updateErr.code === "P2034" || updateErr.code === "P2002") {
+               throw new AppError(500, "INTERNAL_ERROR", "Failed to upsert vendor profile");
+            }
+            throw updateErr;
           }
         }
-        throw new AppError(500, "INTERNAL_ERROR", "Failed to create vendor profile");
+        throw err;
       }
     }
     throw new AppError(500, "INTERNAL_ERROR", "Max attempts reached for upserting profile");
