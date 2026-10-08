@@ -63,22 +63,24 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Web:** สร้างหน้า `/auth/register` และ `/vendor/profile` (โหมดผู้ค้า) พร้อมคลาส `ApiError` และ `thai-errors` helper สำหรับแปลข้อความผิดพลาด, เพิ่มลิงก์บนหน้า login และ vendor dashboard. เว็บได้รับการตรวจสอบด้วย lint (ไฟล์ที่สร้าง/แก้ไขใน A2 มี 0 problems; ยังคงมี 3 problems เดิมใน login/page.tsx และ vendor/page.tsx), tsc และ build สำเร็จ การทำงานบนเบราว์เซอร์ถูกทดสอบด้วยตนเองโดยเจ้าของโปรเจกต์เพียงกรณีการสมัครสมาชิกสำเร็จ 1 ครั้ง ส่วนรายการทดสอบ manual อื่นๆ ระบุเป็น NOT TESTED
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
-## B. หน้าสาธารณะสำหรับผู้เข้าชม
+## B. [DONE] Public pages for attendees (read-only booth map)
 - **Schema:** ไม่มี
 - **Endpoints:**
-  - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) หากเป็น Authenticated (Vendor/Organizer) จะคืนฟิลด์เดิมครบถ้วน หากเป็น Anonymous คืนค่า DTO ที่มีแค่ `storeName`, `productType` สำหรับบูธที่ `CONFIRMED` ซ่อนข้อมูลชื่อ-อีเมลจริง *(หมายเหตุ: Public booth DTO ต้องรองรับกรณีที่ผู้ค้าอาจยังไม่มี VendorProfile โดยยอมให้ storeName และ productType มีค่าเป็น null ได้ และฝั่ง UI จะต้องแสดงป้ายกำกับกลางแทนที่จะพัง)*
-  - `GET /api/events` (Public): คืนค่ารายการอีเวนต์ทุกสถานะยกเว้น `DRAFT`
-  - `GET /api/events/:id` (Public): ดูรายละเอียดงานและผังพื้นที่ หากเป็น `DRAFT` คืน 404
+  - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) ผ่าน `optionalAuth` หากเป็น Authenticated จะทำงานเหมือนเดิม หากเป็น Anonymous คืนค่า DTO สาธารณะ โดยไม่มี `id`, `price`
+  - Anonymous DTO คืนเฉพาะ `code`, `zoneId`, `x`, `y`, `width`, `height`, `rotation`, `status`, `storeName`, `productType`
+  - Anonymous DTO ทำ mapping `status` ใหม่: คืน `AVAILABLE` (ถ้า AVAILABLE), คืน `BOOKED` พร้อม `storeName` / `productType` (ถ้ามี Booking ที่ CONFIRMED แล้ว), ส่วนสถานะอื่นทั้งหมดให้คืนเป็น `RESERVED`
+  - `GET /api/events` (Public) และ `GET /api/events/:id` (Public): คืนค่าอีเวนต์ทุกสถานะยกเว้น `DRAFT` (หากเป็น `DRAFT` คืน 404)
 - **การเปลี่ยนสถานะ:** ไม่มี
 - **Concurrency & Prevention:** ไม่มี (Read-only)
-- **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** ไม่มี (ขยายของเดิม)
+- **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** เพิ่ม `fetchPublic` ใน web เพื่อไม่ส่ง token อัตโนมัติสำหรับ Public data
 - **Tests ที่จะเขียนเพิ่ม:**
-  - เข้าถึงงาน `DRAFT` ได้ 404
-  - ข้อมูลบูธที่ `CONFIRMED` ต้องมีชื่อร้าน/สินค้า แต่ห้ามมีอีเมล/ชื่อจริง ในโหมด Public
+  - Characterization Tests ระบุพฤติกรรมเดิม, ทดสอบ DTO ใหม่, ตรวจสอบ `id`, `price` ว่าไม่หลุด
 - **Test เดิมที่ต้องยังผ่าน:**
-  - เขียน Characterization Tests ใน Vitest ที่บันทึกพฤติกรรมปัจจุบันของ `GET /api/events/:id/booths` (ฟิลด์ทั้งหมดที่จะคืนค่าให้ Vendor/Organizer, คืน 401 ให้ Anonymous, DRAFT ซ่อนสำหรับ Vendors) และต้องรันผ่านบนโค้ดชุดเดิมก่อนที่จะเริ่มแก้โค้ดเส้นทางนี้
-  - (หมายเหตุ: ลบ `test-endpoint-rules.js` ออกจากรายการเนื่องจาก NOT RUNNABLE จากปัญหา Hard-coded CUID)
-- **Web:** หน้า UI ต้องไม่แสดงปุ่ม "จอง" สำหรับอีเวนต์ที่เป็น `CLOSED` หรือ `ENDED`
+  - Characterization test ตัวแรกสำหรับ Anonymous request จะถูกปรับจงใจ 1 จุด (เปลี่ยนจาก 401 เป็น 200) เพื่อยืนยันพฤติกรรมใหม่
+- **Web:**
+  - แปลหน้า `/events` และ `/events/[id]` เป็นภาษาไทย
+  - ปุ่ม 'จองบูธ' จะแสดงก็ต่อเมื่องานมีสถานะ `PUBLISHED` เท่านั้น หากไม่ใช่ `PUBLISHED` จะแสดงข้อความ 'ปิดรับจองสำหรับงานนี้'
+  - ลิงก์จองบูธเปลี่ยนตาม Role ของผู้ชม (ถ้า VENDOR ไปที่ dashboard ถ้ายังไม่ login ให้ไป `/login`)
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
 ## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม
@@ -180,6 +182,7 @@ Any transaction that performs several conditional updates must **throw and roll 
   - หากเปลี่ยนเป็น `CLOSED` หรือ `ENDED`: คิว Waitlist ที่ `PENDING`/`OFFERED` ทั้งหมดจะถูกยกเลิก (`EXPIRED`), บูธที่ `WAITLIST_HOLD` จะกลับเป็น `AVAILABLE` ทันที แต่ Booking ที่ค้างชำระอยู่ จะยังสามารถดำเนินการชำระและยืนยันได้ตามปกติ
 - **Concurrency & Prevention:**
   - ใน `createBooking` ต้องอ่าน Event ด้วย `SELECT ... FOR SHARE` ภายใน `$transaction` เพื่อเช็กว่าสถานะต้องเป็น `PUBLISHED` เท่านั้น
+  - *(หมายเหตุจาก Feature B: Feature B จงใจไม่เพิ่มเงื่อนไขการกั้น (gate) นี้ใน API เพราะสคริปต์ Legacy เดิมมีการจองในงาน DRAFT อยู่ กฎการจองต้องเป็น PUBLISHED นี้จึงเป็นความรับผิดชอบของ Section F ล้วนๆ ซึ่งการแก้ใน F จะทำให้ผลลัพธ์ของ Baseline เปลี่ยนแปลง และต้องพิจารณาตัดสินใจใหม่ในตอนนั้น)*
   - `changeEventStatus` ต้องใช้ `updateMany` (where `id` และ `status` เดิม) แล้วตรวจสอบ `count`
   - การลบอีเวนต์ ต้องล็อกด้วย `FOR UPDATE` ลบข้อมูลลูกทั้งหมดและตรวจสอบว่ายอด Booking = 0
 - **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** Endpoint `changeEventStatus` จะถูกเพิ่มกฎการ Transition ทั้งหมดลงไป และสร้างใหม่ Endpoint ลบอีเวนต์
@@ -193,6 +196,11 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Quality Requirements Coverage:** ข้อ 5
 
 ## Backlog (ยังไม่อยู่ใน Scope ของ A1)
+- **Feature B (Deferred):** การกั้น Booking API (createBooking) สำหรับอีเวนต์ที่ไม่ใช่ PUBLISHED ถูกเลื่อนไปทำใน Feature F เพื่อให้ Legacy script ทำงานต่อได้ก่อน
+- **Feature B (Waitlist/No-show):** การแสดงผล Waitlist และสถานะการจองอื่นๆ
+- **Feature B (Event-day label):** การแสดง Label สำหรับบูธในวันจริง
+- **Feature B (Booking close date):** วันปิดรับจองงาน
+- **Feature B (Localization):** แปลส่วนอื่นๆ ของหน้าจอให้สมบูรณ์
 - **Web Localization:** หน้าเดิมยังเป็นภาษาอังกฤษ และ metadata/title ยังคงเป็น "Create Next App" รวมถึง <html lang="en">
 - **API Validation:** API รองรับช่องว่างล้วน (whitespace-only) สำหรับ storeName และ productType (min(1) โดยไม่มี trim) ตอนนี้เว็บมีการ trim ฝั่ง client แล้ว แต่ API ยังไม่ได้ป้องกัน
 - **Web Tests:** ยังไม่มี Web test framework สำหรับการทดสอบอัตโนมัติ
