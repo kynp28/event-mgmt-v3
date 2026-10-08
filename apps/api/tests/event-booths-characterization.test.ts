@@ -80,9 +80,11 @@ describe("GET /api/events/:id/booths - Current Behavior Characterization", () =>
     });
   });
 
-  it("Anonymous -> 401", async () => {
+  it("Anonymous -> 200 (PUBLISHED), 404 (DRAFT)", async () => {
     const res = await request(app).get(`/api/events/${publishedEventId}/booths`);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    const draftRes = await request(app).get(`/api/events/${draftEventId}/booths`);
+    expect(draftRes.status).toBe(404);
   });
 
   it("VENDOR on PUBLISHED -> 200 with the exact key set per booth", async () => {
