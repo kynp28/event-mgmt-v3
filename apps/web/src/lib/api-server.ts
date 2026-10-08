@@ -46,3 +46,18 @@ export async function fetchServer(path: string, options?: RequestInit) {
     cache: "no-store",
   });
 }
+
+
+export async function fetchPublic(path: string, options: RequestInit = {}) {
+  const apiUrl = process.env.API_URL || "http://localhost:4000";
+  const url = `${apiUrl}${path}`;
+  
+  const headers = new Headers(options.headers);
+  headers.set("Content-Type", "application/json");
+
+  return fetch(url, {
+    ...options,
+    headers,
+    cache: "no-store",
+  });
+}

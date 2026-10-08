@@ -6,13 +6,13 @@ import { apiFetch } from "@/lib/api-client";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default function VendorDashboard() {
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     apiFetch("/api/events")
       .then(data => {
-        setEvents(data);
+        setEvents(data.filter((e: Record<string, unknown>) => e.status === "PUBLISHED"));
         setLoading(false);
       })
       .catch(err => {
@@ -50,6 +50,7 @@ export default function VendorDashboard() {
             >
               <div className="h-40 bg-gray-200 relative">
                 {event.coverImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={event.coverImage} alt={event.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
