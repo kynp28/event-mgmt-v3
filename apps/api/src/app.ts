@@ -4,7 +4,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import { login, logout, getMe, registerVendor } from "./controllers/auth.controller";
-import { requireAuth } from "./middlewares/auth.middleware";
+import { requireAuth, optionalAuth } from "./middlewares/auth.middleware";
 
 import * as adminController from "./controllers/admin.controller";
 import { requireRole } from "./middlewares/auth.middleware";
@@ -72,7 +72,7 @@ export function createApp(options?: AppOptions) {
   // Public Event Routes
   app.get("/api/events", eventController.getPublicEvents);
   app.get("/api/events/:id", eventController.getPublicEventById);
-  app.get("/api/events/:id/booths", requireAuth, eventController.getEventBooths);
+  app.get("/api/events/:id/booths", optionalAuth, eventController.getEventBooths);
 
   // Organizer Event Routes
   const isOrganizer = [requireAuth, requireRole(["ORGANIZER"])];

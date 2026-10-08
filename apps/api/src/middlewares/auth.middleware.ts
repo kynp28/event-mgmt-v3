@@ -75,3 +75,44 @@ export const verifyOrganizerEventOwnership = async (userId: string, eventId: str
     throw new AppError(403, "FORBIDDEN", "You do not own this event");
   }
 };
+
+
+export const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    const user = await db.user.findUnique({
+      where: { id: decoded.userId },
+      include: { organizerProfile: true }
+    });
+
+    if (!user) {
+      return next();
+    }
+
+    if (user.role === "ORGANIZER") {
+      if (!user.organizerProfile || user.organizerProfile.status !== "APPROVED") {
+        return next();
+      }
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as Role,
+    };
+    next();
+  } catch (error) {
+    // If JWT fails to verify, just act as anonymous
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof jwt.NotBeforeError) {
+      return next();
+    }
+    // Pass unexpected DB errors to the global error handler
+    next(error);
+  }
+};
