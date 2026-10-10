@@ -6,13 +6,13 @@ import { apiFetch } from "@/lib/api-client";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default function VendorDashboard() {
-  const [events, setEvents] = useState<Record<string, unknown>[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     apiFetch("/api/events")
       .then(data => {
-        setEvents(data.filter((e: Record<string, unknown>) => e.status === "PUBLISHED"));
+        setEvents(data.filter((e: any) => e.status === "PUBLISHED"));
         setLoading(false);
       })
       .catch(err => {

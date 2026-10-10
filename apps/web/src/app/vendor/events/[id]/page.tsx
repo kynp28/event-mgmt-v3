@@ -13,8 +13,8 @@ import Link from "next/link";
 export default function VendorEventPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
-  const [event, setEvent] = useState<Record<string, unknown> | null>(null);
-  const [booths, setBooths] = useState<Record<string, unknown>[]>([]);
+  const [event, setEvent] = useState<any>(null);
+  const [booths, setBooths] = useState<any[]>([]);
   const [selectedBooths, setSelectedBooths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"MAP" | "LIST">("MAP");
@@ -28,7 +28,7 @@ export default function VendorEventPage() {
       }
       setLoading(false);
     }).catch(err => {
-      alert(err instanceof Error ? err.message : String(err));
+      alert(err.message);
       setLoading(false);
     });
   }, [id]);
@@ -56,8 +56,8 @@ export default function VendorEventPage() {
       });
       alert("Booking created successfully!");
       router.push("/vendor/bookings");
-    } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
