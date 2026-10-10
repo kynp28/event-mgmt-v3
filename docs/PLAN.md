@@ -63,7 +63,8 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Web:** สร้างหน้า `/auth/register` และ `/vendor/profile` (โหมดผู้ค้า) พร้อมคลาส `ApiError` และ `thai-errors` helper สำหรับแปลข้อความผิดพลาด, เพิ่มลิงก์บนหน้า login และ vendor dashboard. เว็บได้รับการตรวจสอบด้วย lint (ไฟล์ที่สร้าง/แก้ไขใน A2 มี 0 problems; ยังคงมี 3 problems เดิมใน login/page.tsx และ vendor/page.tsx), tsc และ build สำเร็จ การทำงานบนเบราว์เซอร์ถูกทดสอบด้วยตนเองโดยเจ้าของโปรเจกต์เพียงกรณีการสมัครสมาชิกสำเร็จ 1 ครั้ง ส่วนรายการทดสอบ manual อื่นๆ ระบุเป็น NOT TESTED
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
-## B. [DONE] Public pages for attendees (read-only booth map)
+## B. Public pages for attendees (read-only booth map)
+Browser verification by the owner on 2026-10-08: /events list (CLOSED badge), /events/[id] anonymous (Thai text, map, 'เข้าสู่ระบบเพื่อจองบูธ' button), /vendor dashboard (CLOSED event hidden), /vendor/events/[id] for a PUBLISHED event. NOT TESTED: /events/[id] while logged in as VENDOR, /events/[id] and /vendor/events/[id] for a CLOSED event.
 - **Schema:** ไม่มี
 - **Endpoints:**
   - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) ผ่าน `optionalAuth` หากเป็น Authenticated จะทำงานเหมือนเดิม หากเป็น Anonymous คืนค่า DTO สาธารณะ โดยไม่มี `id`, `price`
@@ -79,8 +80,7 @@ Any transaction that performs several conditional updates must **throw and roll 
   - Characterization test ตัวแรกสำหรับ Anonymous request จะถูกปรับจงใจ 1 จุด (เปลี่ยนจาก 401 เป็น 200) เพื่อยืนยันพฤติกรรมใหม่
 - **Web:**
   - แปลหน้า `/events` และ `/events/[id]` เป็นภาษาไทย
-  - ปุ่ม 'จองบูธ' จะแสดงก็ต่อเมื่องานมีสถานะ `PUBLISHED` เท่านั้น หากไม่ใช่ `PUBLISHED` จะแสดงข้อความ 'ปิดรับจองสำหรับงานนี้'
-  - ลิงก์จองบูธเปลี่ยนตาม Role ของผู้ชม (ถ้า VENDOR ไปที่ dashboard ถ้ายังไม่ login ให้ไป `/login`)
+  - Booking link: anonymous -> /login; VENDOR -> /vendor/events/[id]; ORGANIZER/ADMIN -> no link; not shown unless PUBLISHED.
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
 ## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม
@@ -196,11 +196,12 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Quality Requirements Coverage:** ข้อ 5
 
 ## Backlog (ยังไม่อยู่ใน Scope ของ A1)
-- **Feature B (Deferred):** การกั้น Booking API (createBooking) สำหรับอีเวนต์ที่ไม่ใช่ PUBLISHED ถูกเลื่อนไปทำใน Feature F เพื่อให้ Legacy script ทำงานต่อได้ก่อน
-- **Feature B (Waitlist/No-show):** การแสดงผล Waitlist และสถานะการจองอื่นๆ
-- **Feature B (Event-day label):** การแสดง Label สำหรับบูธในวันจริง
-- **Feature B (Booking close date):** วันปิดรับจองงาน
-- **Feature B (Localization):** แปลส่วนอื่นๆ ของหน้าจอให้สมบูรณ์
+- Waitlist / No-show: a vendor with a CONFIRMED booking who does not show up on event day cannot be replaced from the waitlist. Waitlist (section E) reacts only to a booth being released (hold expiry or second rejected slip). Undecided: who marks no-show and when, refund, how the substitute pays and gets a ticket on event day, and an exception to "booking only while PUBLISHED". Related to Tier ◆ (Invoice/Penalty), not designed.
+- Event-day label: optional UI-only label "กำลังจัดงาน" for the EVENT (not booths), computed from startDate/endDate when status is CLOSED. No new status.
+- Booking close date: no field exists; organizers close bookings manually. Undecided.
+- Direct booking API on non-PUBLISHED events: POST /api/vendor/bookings does not check event status, so booking DRAFT or CLOSED events by API is possible until section F. Not worsened by Feature B (visitors get no booth ids; vendors still get 404 on CLOSED booths). The legacy baseline scripts book on DRAFT events, so F's rule will change their output and needs an explicit baseline decision.
+- Remaining localization: <html lang="en">, global metadata and all non-public pages are still English.
+- Public booth map is a simple grid of boxes, not a positioned floor plan like the vendor page (booths without x/y exist).
 - **Web Localization:** หน้าเดิมยังเป็นภาษาอังกฤษ และ metadata/title ยังคงเป็น "Create Next App" รวมถึง <html lang="en">
 - **API Validation:** API รองรับช่องว่างล้วน (whitespace-only) สำหรับ storeName และ productType (min(1) โดยไม่มี trim) ตอนนี้เว็บมีการ trim ฝั่ง client แล้ว แต่ API ยังไม่ได้ป้องกัน
 - **Web Tests:** ยังไม่มี Web test framework สำหรับการทดสอบอัตโนมัติ
