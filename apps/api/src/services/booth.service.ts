@@ -142,13 +142,28 @@ export async function getPublicEventBooths(eventId: string) {
 
   const rawBooths = await db.booth.findMany({
     where: { eventId },
-    include: {
+    select: {
+      code: true,
+      zoneId: true,
+      x: true,
+      y: true,
+      width: true,
+      height: true,
+      rotation: true,
+      status: true,
       bookingItems: {
-        include: {
+        where: { booking: { status: "CONFIRMED" } },
+        orderBy: { booking: { createdAt: "desc" } },
+        take: 1,
+        select: {
           booking: {
-            include: {
+            select: {
               vendor: {
-                include: { vendorProfile: true }
+                select: {
+                  vendorProfile: {
+                    select: { storeName: true, productType: true }
+                  }
+                }
               }
             }
           }
@@ -166,12 +181,7 @@ export async function getPublicEventBooths(eventId: string) {
     if (booth.status === "AVAILABLE") {
       publicStatus = "AVAILABLE";
     } else {
-      // Find latest confirmed booking
-      const confirmedBookings = booth.bookingItems
-        .filter(bi => bi.booking.status === "CONFIRMED")
-        .sort((a, b) => b.booking.createdAt.getTime() - a.booking.createdAt.getTime());
-      
-      const latestConfirmed = confirmedBookings[0];
+      const latestConfirmed = booth.bookingItems[0];
 
       if (booth.status === "BOOKED" && latestConfirmed) {
         publicStatus = "BOOKED";
