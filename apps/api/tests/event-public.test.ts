@@ -97,6 +97,7 @@ describe("Feature B: Public Pages API", () => {
       const b3 = await db.booth.create({ data: { eventId: closedEventId, code: "PENDING1", price: 100, status: "PAYMENT_PENDING" } });
       const b4 = await db.booth.create({ data: { eventId: closedEventId, code: "DISABLED1", price: 100, status: "DISABLED" } });
       const b5 = await db.booth.create({ data: { eventId: closedEventId, code: "TWOCONF1", price: 100, status: "BOOKED" } });
+      const b6 = await db.booth.create({ data: { eventId: closedEventId, code: "BOOKED_NOPROF", price: 100, status: "BOOKED" } });
 
       bookedConfirmedBoothId = b2.id;
       paymentPendingBoothId = b3.id;
@@ -132,6 +133,12 @@ describe("Feature B: Public Pages API", () => {
       await db.booking.create({
         data: {
           vendorId: vendor2.id, eventId: closedEventId, status: "CONFIRMED", totalAmount: 100,
+          items: { create: { boothId: b6.id, price: 100 } }
+        }
+      });
+      await db.booking.create({
+        data: {
+          vendorId: vendor2.id, eventId: closedEventId, status: "CONFIRMED", totalAmount: 100,
           createdAt: new Date(Date.now() - 10000), // Older
           items: { create: { boothId: b5.id, price: 100 } }
         }
@@ -152,6 +159,8 @@ describe("Feature B: Public Pages API", () => {
         }
       });
       
+      // Add PUBLISHED booth
+      await db.booth.create({ data: { eventId: pubEventId, code: "PUB1", price: 100, status: "AVAILABLE" } });
       // Also add a DRAFT booth just in case
       await db.booth.create({ data: { eventId: draftEventId, code: "D1", price: 100, status: "AVAILABLE" } });
     });
@@ -214,6 +223,11 @@ describe("Feature B: Public Pages API", () => {
       expect(bTwoConf.status).toBe("BOOKED");
       expect(bTwoConf.storeName).toBe("Store 3"); // the latest one
       expect(bTwoConf.productType).toBe("Type 3");
+
+      const bNoProf = booths.find((b: any) => b.code === "BOOKED_NOPROF");
+      expect(bNoProf.status).toBe("BOOKED");
+      expect(bNoProf.storeName).toBeNull();
+      expect(bNoProf.productType).toBeNull();
     });
 
     it("Cookie handling: invalid/unapproved token -> treated as anonymous", async () => {
@@ -224,14 +238,13 @@ describe("Feature B: Public Pages API", () => {
           organizerProfile: { create: { companyName: "U", status: "PENDING" } }
         }
       });
-      const loginRes = await request(app).post("/api/auth/login").send({ email: "unapproved@org.com", password: "password123" });
-      
-      const unapprovedCookie = loginRes.headers["set-cookie"] || [`token=ey;`];
+      const unapprovedCookie = [`token=${generateToken(unapprovedOrg.id)}`];
       
       // Should get public DTO, not 401/403
       const res1 = await request(app).get(`/api/events/${closedEventId}/booths`).set("Cookie", unapprovedCookie);
       expect(res1.status).toBe(200);
-      expect(Object.keys(res1.body[0])).not.toContain("price"); // public DTO
+      expect(Object.keys(res1.body[0])).not.toContain("price");
+      expect(Object.keys(res1.body[0])).not.toContain("id"); // public DTO
 
       const res2 = await request(app).get(`/api/events/${closedEventId}/booths`).set("Cookie", ["token=invalid"]);
       expect(res2.status).toBe(200);
@@ -241,6 +254,8 @@ describe("Feature B: Public Pages API", () => {
       const res3 = await request(app).get(`/api/events/${pubEventId}/booths`).set("Cookie", cookies.vendor);
       expect(res3.status).toBe(200);
       expect(Array.isArray(res3.body)).toBe(true);
+      const expectedFullKeys = ["id", "eventId", "code", "zoneId", "x", "y", "width", "height", "rotation", "price", "status", "createdAt", "updatedAt"].sort();
+      expect(Object.keys(res3.body[0]).sort()).toEqual(expectedFullKeys);
     });
   });
 });
