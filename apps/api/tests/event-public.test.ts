@@ -131,6 +131,12 @@ describe("Feature B: Public Pages API", () => {
       const vendor2 = await db.user.create({
         data: { email: "vendor_np2@test.com", password: "pwd", role: "VENDOR" }
       });
+      const vendorOld = await db.user.create({
+        data: {
+          email: "vendor_old@test.com", password: "pwd", role: "VENDOR",
+          vendorProfile: { create: { storeName: "Store Old", productType: "Type Old" } }
+        }
+      });
       await db.booking.create({
         data: {
           vendorId: vendor2.id, eventId: closedEventId, status: "CONFIRMED", totalAmount: 100,
@@ -139,7 +145,7 @@ describe("Feature B: Public Pages API", () => {
       });
       await db.booking.create({
         data: {
-          vendorId: vendor2.id, eventId: closedEventId, status: "CONFIRMED", totalAmount: 100,
+          vendorId: vendorOld.id, eventId: closedEventId, status: "CONFIRMED", totalAmount: 100,
           createdAt: new Date(Date.now() - 10000), // Older
           items: { create: { boothId: b5.id, price: 100 } }
         }
@@ -255,8 +261,18 @@ describe("Feature B: Public Pages API", () => {
       const res3 = await request(app).get(`/api/events/${pubEventId}/booths`).set("Cookie", cookies.vendor);
       expect(res3.status).toBe(200);
       expect(Array.isArray(res3.body)).toBe(true);
-      const expectedFullKeys = ["id", "eventId", "code", "zoneId", "x", "y", "width", "height", "rotation", "price", "status", "createdAt", "updatedAt"].sort();
+      const expectedFullKeys = ["id", "code", "price", "status", "physicalLength", "physicalWidth", "x", "y", "width", "height", "rotation", "zoneId"].sort();
       expect(Object.keys(res3.body[0]).sort()).toEqual(expectedFullKeys);
+    });
+
+    it("PUBLISHED booths -> 200 for anonymous with public DTO", async () => {
+      const res = await request(app).get(`/api/events/${pubEventId}/booths`);
+      expect(res.status).toBe(200);
+      const pub1 = res.body.find((b: any) => b.code === "PUB1");
+      expect(pub1).toBeDefined();
+      expect(pub1.status).toBe("AVAILABLE");
+      expect(Object.keys(pub1)).not.toContain("id");
+      expect(Object.keys(pub1)).not.toContain("price");
     });
   });
 });
