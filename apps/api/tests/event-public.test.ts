@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
@@ -238,7 +239,7 @@ describe("Feature B: Public Pages API", () => {
           organizerProfile: { create: { companyName: "U", status: "PENDING" } }
         }
       });
-      const unapprovedCookie = [`token=${generateToken(unapprovedOrg.id)}`];
+      const unapprovedCookie = [`token=${jwt.sign({ userId: unapprovedOrg.id }, process.env.JWT_SECRET!)}`];
       
       // Should get public DTO, not 401/403
       const res1 = await request(app).get(`/api/events/${closedEventId}/booths`).set("Cookie", unapprovedCookie);
