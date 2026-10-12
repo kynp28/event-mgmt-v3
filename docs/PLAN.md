@@ -64,12 +64,13 @@ Any transaction that performs several conditional updates must **throw and roll 
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
 ## B. Public pages for attendees (read-only booth map)
-Browser verification by the owner on 2026-10-08: /events list (CLOSED badge), /events/[id] anonymous (Thai text, map, 'เข้าสู่ระบบเพื่อจองบูธ' button), /vendor dashboard (CLOSED event hidden), /vendor/events/[id] for a PUBLISHED event. NOT TESTED: /events/[id] while logged in as VENDOR, /events/[id] and /vendor/events/[id] for a CLOSED event.
+Browser verification by the owner (screenshots). 2026-10-08: /events list (CLOSED badge), /events/[id] anonymous (Thai text, map, 'เข้าสู่ระบบเพื่อจองบูธ' button), /vendor dashboard (CLOSED event hidden), /vendor/events/[id] for a PUBLISHED event. 2026-10-12 (browser session logged in as VENDOR): /events/[id] for a PUBLISHED event (map + 'จองบูธ' button); /events/[id] for a CLOSED event (map with store name, no booking button, no extra message); /vendor/events/[id] for a CLOSED event ('ปิดรับจองสำหรับงานนี้' notice, no booth list). NOT TESTED in a browser: anonymous view of a CLOSED event page (covered by API tests), ORGANIZER/ADMIN view of /events/[id] (expected: no booking link).
 - **Schema:** ไม่มี
 - **Endpoints:**
   - ใช้ Endpoint เดิม `GET /api/events/:id/booths` ขยายให้รองรับ Public (Anonymous) ผ่าน `optionalAuth` หากเป็น Authenticated จะทำงานเหมือนเดิม หากเป็น Anonymous คืนค่า DTO สาธารณะ โดยไม่มี `id`, `price`
   - Anonymous DTO คืนเฉพาะ `code`, `zoneId`, `x`, `y`, `width`, `height`, `rotation`, `status`, `storeName`, `productType`
   - Anonymous DTO ทำ mapping `status` ใหม่: คืน `AVAILABLE` (ถ้า AVAILABLE), คืน `BOOKED` พร้อม `storeName` / `productType` (ถ้ามี Booking ที่ CONFIRMED แล้ว), ส่วนสถานะอื่นทั้งหมดให้คืนเป็น `RESERVED`
+  - `optionalAuth`: missing, invalid or expired token, unknown user, or an ORGANIZER whose profile is not APPROVED is treated as anonymous (public DTO) instead of returning 401/403. Authenticated APPROVED users keep the previous behavior (DRAFT and CLOSED booths still return 404 for VENDOR and for a non-owner ORGANIZER).
   - `GET /api/events` (Public) และ `GET /api/events/:id` (Public): คืนค่าอีเวนต์ทุกสถานะยกเว้น `DRAFT` (หากเป็น `DRAFT` คืน 404)
 - **การเปลี่ยนสถานะ:** ไม่มี
 - **Concurrency & Prevention:** ไม่มี (Read-only)
@@ -80,6 +81,7 @@ Browser verification by the owner on 2026-10-08: /events list (CLOSED badge), /e
   - Characterization test ตัวแรกสำหรับ Anonymous request จะถูกปรับจงใจ 1 จุด (เปลี่ยนจาก 401 เป็น 200) เพื่อยืนยันพฤติกรรมใหม่
 - **Web:**
   - แปลหน้า `/events` และ `/events/[id]` เป็นภาษาไทย
+  - `/vendor` (dashboard) แสดงเฉพาะงานที่ PUBLISHED (กรองฝั่ง client); `/vendor/events/[id]` ไม่เรียก booths API และแสดงข้อความ "ปิดรับจองสำหรับงานนี้" เมื่องานไม่ใช่ PUBLISHED
   - Booking link: anonymous -> /login; VENDOR -> /vendor/events/[id]; ORGANIZER/ADMIN -> no link; not shown unless PUBLISHED.
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
@@ -200,9 +202,8 @@ Browser verification by the owner on 2026-10-08: /events list (CLOSED badge), /e
 - Event-day label: optional UI-only label "กำลังจัดงาน" for the EVENT (not booths), computed from startDate/endDate when status is CLOSED. No new status.
 - Booking close date: no field exists; organizers close bookings manually. Undecided.
 - Direct booking API on non-PUBLISHED events: POST /api/vendor/bookings does not check event status, so booking DRAFT or CLOSED events by API is possible until section F. Not worsened by Feature B (visitors get no booth ids; vendors still get 404 on CLOSED booths). The legacy baseline scripts book on DRAFT events, so F's rule will change their output and needs an explicit baseline decision.
-- Remaining localization: <html lang="en">, global metadata and all non-public pages are still English.
+- Remaining localization: <html lang="en">, global metadata (the browser tab title is still "Create Next App") and all non-public pages are still English.
 - Public booth map is a simple grid of boxes, not a positioned floor plan like the vendor page (booths without x/y exist).
-- **Web Localization:** หน้าเดิมยังเป็นภาษาอังกฤษ และ metadata/title ยังคงเป็น "Create Next App" รวมถึง <html lang="en">
 - **API Validation:** API รองรับช่องว่างล้วน (whitespace-only) สำหรับ storeName และ productType (min(1) โดยไม่มี trim) ตอนนี้เว็บมีการ trim ฝั่ง client แล้ว แต่ API ยังไม่ได้ป้องกัน
 - **Web Tests:** ยังไม่มี Web test framework สำหรับการทดสอบอัตโนมัติ
 - **Auth:** [DONE] แก้ไข Endpoint `POST /api/auth/login` โดยสร้าง 4-field DTO เพื่อป้องกันการหลุดของ `password` hash (จากการ Audit พบว่า login เป็นเพียง Endpoint เดียวที่คืนค่าแถว User เต็มๆ ส่วน Endpoint อื่นใช้ `select` คืนค่าเฉพาะฟิลด์ที่ปลอดภัยเท่านั้น)
