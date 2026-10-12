@@ -39,7 +39,6 @@ export default async function PublicEventDetail({ params }: { params: Promise<{ 
   return (
     <div className="max-w-4xl mx-auto p-8">
       {event.coverImage && (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={event.coverImage} alt={event.name} className="w-full h-64 object-cover rounded-lg mb-8" />
       )}
       <h1 className="text-4xl font-bold mb-4">{event.name}</h1>

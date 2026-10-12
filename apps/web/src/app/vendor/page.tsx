@@ -12,7 +12,7 @@ export default function VendorDashboard() {
   useEffect(() => {
     apiFetch("/api/events")
       .then(data => {
-        setEvents(data.filter((e: any) => e.status === "PUBLISHED"));
+        setEvents(data.filter((e: { status: string }) => e.status === "PUBLISHED"));
         setLoading(false);
       })
       .catch(err => {
@@ -50,7 +50,6 @@ export default function VendorDashboard() {
             >
               <div className="h-40 bg-gray-200 relative">
                 {event.coverImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={event.coverImage} alt={event.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
