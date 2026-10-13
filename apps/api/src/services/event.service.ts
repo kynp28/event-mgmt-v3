@@ -17,7 +17,7 @@ const listSelect = {
 
 export async function getPublicEvents() {
   return db.event.findMany({
-    where: { status: "PUBLISHED" },
+    where: { status: { not: "DRAFT" } },
     select: listSelect,
     orderBy: { startDate: "asc" },
   });
@@ -25,7 +25,7 @@ export async function getPublicEvents() {
 
 export async function getPublicEventById(id: string) {
   return db.event.findFirst({
-    where: { id, status: "PUBLISHED" },
+    where: { id, status: { not: "DRAFT" } },
     // we omit the select here to get all fields, including coverImage
   });
 }

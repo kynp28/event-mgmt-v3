@@ -3,13 +3,13 @@ import { z } from "zod";
 import * as eventService from "../services/event.service";
 import { createEventSchema, updateEventSchema, changeEventStatusSchema } from "@eventcore/shared";
 
-// List public events (PUBLISHED only)
+// List public events (PUBLISHED and CLOSED)
 export async function getPublicEvents(req: Request, res: Response) {
   const events = await eventService.getPublicEvents();
   res.json(events);
 }
 
-// Get public event details (PUBLISHED only)
+// Get public event details (PUBLISHED and CLOSED)
 export async function getPublicEventById(req: Request, res: Response) {
   const event = await eventService.getPublicEventById(req.params.id);
   if (!event) {
@@ -90,7 +90,12 @@ import * as boothService from '../services/booth.service';
 
 export async function getEventBooths(req: Request, res: Response) {
   try {
-    const booths = await boothService.getVisibleEventBooths(req.params.id, req.user!.id, req.user!.role);
+    let booths;
+    if (req.user) {
+      booths = await boothService.getVisibleEventBooths(req.params.id, req.user.id, req.user.role);
+    } else {
+      booths = await boothService.getPublicEventBooths(req.params.id);
+    }
     res.json(booths);
   } catch (err: any) {
     if (err.code === "NOT_FOUND" || (err.error && err.error.code === "NOT_FOUND")) {

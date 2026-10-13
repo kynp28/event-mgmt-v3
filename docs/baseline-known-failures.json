@@ -1,0 +1,4 @@
+{
+  "test-endpoint-rules.js": "hard-coded organizer id",
+  "test-step5.js": "it passes only if vendor2 wins the concurrent booking, because maxBoothsPerVendor is 2 at line 34 and vendor1 fires first"
+}

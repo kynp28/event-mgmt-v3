@@ -20,12 +20,12 @@ export default function VendorEventPage() {
   const [viewMode, setViewMode] = useState<"MAP" | "LIST">("MAP");
 
   useEffect(() => {
-    Promise.all([
-      apiFetch(`/api/events/${id}`),
-      apiFetch(`/api/events/${id}/booths`)
-    ]).then(([evt, bths]) => {
+    apiFetch(`/api/events/${id}`).then(async (evt) => {
       setEvent(evt);
-      setBooths(bths);
+      if (evt.status === "PUBLISHED") {
+        const bths = await apiFetch(`/api/events/${id}/booths`);
+        setBooths(bths);
+      }
       setLoading(false);
     }).catch(err => {
       alert(err.message);
@@ -39,8 +39,8 @@ export default function VendorEventPage() {
 
     setSelectedBooths(prev => {
       if (prev.includes(boothId)) return prev.filter(b => b !== boothId);
-      if (prev.length >= (event.maxBoothsPerVendor || 1)) {
-        alert(`You can only select up to ${event.maxBoothsPerVendor} booth(s).`);
+      if (prev.length >= (event?.maxBoothsPerVendor || 1)) {
+        alert(`You can only select up to ${event?.maxBoothsPerVendor} booth(s).`);
         return prev;
       }
       return [...prev, boothId];
@@ -63,6 +63,25 @@ export default function VendorEventPage() {
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (!event) return <div className="p-8">Event not found</div>;
+
+  if (event.status !== "PUBLISHED") {
+    return (
+      <div className="p-8 max-w-5xl mx-auto flex flex-col h-[calc(100vh-64px)]">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <Link href="/vendor" className="text-blue-600 hover:underline mb-2 inline-block">
+              &larr; Back to Dashboard
+            </Link>
+            <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
+          </div>
+          <LogoutButton />
+        </div>
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-6 rounded-lg text-center mt-8">
+          <p className="text-xl font-bold">ปิดรับจองสำหรับงานนี้</p>
+        </div>
+      </div>
+    );
+  }
 
   const selectedTotal = selectedBooths.reduce((sum, bId) => {
     const b = booths.find(x => x.id === bId);

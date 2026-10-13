@@ -132,3 +132,79 @@ export async function getVisibleEventBooths(eventId: string, userId: string, use
     orderBy: { createdAt: "asc" }
   });
 }
+
+
+export async function getPublicEventBooths(eventId: string) {
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event || event.status === "DRAFT") {
+    throw new AppError(404, "NOT_FOUND", "Event not found");
+  }
+
+  const rawBooths = await db.booth.findMany({
+    where: { eventId },
+    select: {
+      code: true,
+      zoneId: true,
+      x: true,
+      y: true,
+      width: true,
+      height: true,
+      rotation: true,
+      status: true,
+      bookingItems: {
+        where: { booking: { status: "CONFIRMED" } },
+        orderBy: { booking: { createdAt: "desc" } },
+        take: 1,
+        select: {
+          booking: {
+            select: {
+              vendor: {
+                select: {
+                  vendorProfile: {
+                    select: { storeName: true, productType: true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+
+  return rawBooths.map(booth => {
+    let publicStatus: "AVAILABLE" | "BOOKED" | "RESERVED" = "RESERVED";
+    let storeName: string | null = null;
+    let productType: string | null = null;
+
+    if (booth.status === "AVAILABLE") {
+      publicStatus = "AVAILABLE";
+    } else {
+      const latestConfirmed = booth.bookingItems[0];
+
+      if (booth.status === "BOOKED" && latestConfirmed) {
+        publicStatus = "BOOKED";
+        if (latestConfirmed.booking.vendor.vendorProfile) {
+          storeName = latestConfirmed.booking.vendor.vendorProfile.storeName;
+          productType = latestConfirmed.booking.vendor.vendorProfile.productType;
+        }
+      } else {
+        publicStatus = "RESERVED";
+      }
+    }
+
+    return {
+      code: booth.code,
+      zoneId: booth.zoneId,
+      x: booth.x,
+      y: booth.y,
+      width: booth.width,
+      height: booth.height,
+      rotation: booth.rotation,
+      status: publicStatus,
+      storeName,
+      productType
+    };
+  });
+}

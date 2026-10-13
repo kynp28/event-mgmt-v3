@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { loginSchema } from "@eventcore/shared";
+import { loginSchema, registerVendorSchema } from "@eventcore/shared";
 import { AuthService } from "../services/auth.service";
+import { setAuthCookie } from "../utils/cookie";
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -11,14 +12,24 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     const { token, user } = await AuthService.login(parsed.data);
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
-
+    setAuthCookie(res, token);
     res.json({ message: "Logged in successfully", user });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const registerVendor = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = registerVendorSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: { code: "BAD_REQUEST", message: "Invalid input", details: parsed.error.format() } });
+    }
+
+    const { token, user } = await AuthService.registerVendor(parsed.data);
+
+    setAuthCookie(res, token);
+    res.status(201).json({ message: "Vendor registered successfully", user });
   } catch (error: any) {
     next(error);
   }

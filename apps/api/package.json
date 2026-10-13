@@ -8,7 +8,12 @@
     "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "vitest run",
+    "baseline:legacy": "node scripts/run-legacy-baseline.mjs",
+    "baseline:compare": "node scripts/run-legacy-baseline.mjs --compare",
+    "baseline:update-reference": "node scripts/run-legacy-baseline.mjs --update-reference --runs 3",
+    "baseline:scan": "node scripts/check-expected-lines.mjs"
   },
   "dependencies": {
     "@eventcore/shared": "workspace:*",
@@ -32,9 +37,13 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.9",
     "@types/node-cron": "3.0.11",
+    "@types/supertest": "7.2.1",
     "prisma": "6.19.3",
+    "supertest": "7.3.0",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vite": "^8.3.1",
+    "vitest": "5.0.2"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

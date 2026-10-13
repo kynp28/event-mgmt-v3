@@ -56,6 +56,7 @@ model User {
   updatedAt        DateTime          @updatedAt
 
   organizerProfile OrganizerProfile?
+  vendorProfile    VendorProfile?
   events           Event[]           @relation("EventOrganizer")
   bookings         Booking[]         @relation("VendorBookings")
   verifiedPayments Payment[]         @relation("PaymentVerifier")
@@ -227,4 +228,14 @@ model AuditLog {
 
   @@index([userId])
   @@index([entityType, entityId])
+}
+
+model VendorProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  storeName   String   @db.VarChar(100)
+  productType String   @db.VarChar(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

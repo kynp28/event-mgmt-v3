@@ -1,0 +1,20 @@
+[POST] /organizer/events -> 201
+[POST] /organizer/events -> 201
+[POST] /organizer/events/<ID>/zones -> 201
+-> Create zone OK: VIP Zone
+[POST] /organizer/events/<ID>/booths -> 201
+-> Create booth OK: V1
+[POST] /organizer/events/<ID>/booths -> 409
+   Error: {"code":"CONFLICT","message":"Booth code already exists in this event"}
+-> Duplicate code same event: PASS (409)
+[POST] /organizer/events/<ID>/booths -> 201
+-> Duplicate code different event: PASS (201)
+[PATCH] /organizer/events/<ID>/booths/<ID> -> 404
+   Error: {"code":"NOT_FOUND","message":"Event not found or not owned by you"}
+-> Edit another org's booth: PASS (404)
+[PATCH] /organizer/events/<ID>/booths/<ID> -> 400
+   Error: {"code":"VALIDATION_ERROR","issues":[{"received":"BOOKED","code":"invalid_enum_value","options":["AVAILABLE","DISABLED"],"path":["status"],"message":"Invalid enum value. Expected 'AVAILABLE' | 'DISABLED', received 'BOOKED'"}]}
+-> Set status to BOOKED: PASS (400)
+[DELETE] /organizer/events/<ID>/zones/<ID> -> 204
+[GET] /organizer/events/<ID>/booths -> 200
+-> Delete zone (booth survives with null zoneId): PASS

@@ -12,7 +12,7 @@ export default function VendorDashboard() {
   useEffect(() => {
     apiFetch("/api/events")
       .then(data => {
-        setEvents(data);
+        setEvents(data.filter((e: { status: string }) => e.status === "PUBLISHED"));
         setLoading(false);
       })
       .catch(err => {
@@ -26,6 +26,9 @@ export default function VendorDashboard() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Discover Events</h1>
         <div className="flex items-center gap-4">
+          <Link href="/vendor/profile" className="text-blue-600 font-bold hover:underline">
+            ข้อมูลร้านค้า
+          </Link>
           <Link href="/vendor/bookings" className="text-blue-600 font-bold hover:underline">
             My Bookings
           </Link>

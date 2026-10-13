@@ -1,0 +1,23 @@
+Setting up data for Admin tests...
+
+=== 1. Vendor tries to access admin routes (403) ===
+Status: 403 (expected 403)
+Error: FORBIDDEN
+
+=== 2. Admin approves a pending organizer ===
+Status: 200
+
+=== 3. That organizer can now log in ===
+Login Status: 200
+Message: Logged in successfully
+
+=== 4. Admin double-approves (clean no-op) ===
+Status: 200
+Message: Already approved
+
+=== 5. Admin rejects an organizer with reason ===
+Status: 200
+
+=== 6. Rejected organizer tries to log in ===
+Login Status: 403 (expected 403)
+Error Msg: Organizer account was rejected. Reason: Incomplete details

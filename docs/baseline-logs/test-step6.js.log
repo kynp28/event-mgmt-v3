@@ -1,0 +1,24 @@
+Setting up data for Ticket tests...
+
+=== 1. Vendor views own confirmed ticket ===
+Status: 200
+Has token: true
+
+=== 2. Vendor tries to view another vendor's ticket ===
+Status: 404 (expected 404 or 403)
+
+=== 3. Organizer checks in on UNCONFIRMED booking (should not have ticket, or fail) ===
+Unconfirmed booking has ticket? false
+
+=== 4. Check-in concurrency test (atomic updateMany) ===
+Request 1 status: 200
+Request 2 status: 409
+Concurrency test: PASS
+409 msg: Checked in at <TS> by <ID>
+
+=== 5. Organizer checks in SAME token again ===
+Status: 409 (expected 409)
+Error message: Checked in at <TS> by <ID>
+
+=== 6. Organizer from DIFFERENT event tries to check in ===
+Status: 403 (expected 403/404)

@@ -5,6 +5,15 @@ import { LoginPayload } from "@eventcore/shared";
 import { AppError } from "../utils/AppError";
 
 export class AuthService {
+  static toUserDto(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    };
+  }
+
   static async login(data: LoginPayload) {
     const user = await db.user.findUnique({
       where: { email: data.email },
@@ -38,6 +47,37 @@ export class AuthService {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
 
-    return { token, user };
+    return { token, user: AuthService.toUserDto(user) };
+  }
+
+  static async registerVendor(data: import("@eventcore/shared").RegisterVendorPayload) {
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    try {
+      const user = await db.user.create({
+        data: {
+          email: data.email,
+          password: hashedPassword,
+          name: data.name,
+          role: "VENDOR",
+          vendorProfile: {
+            create: {
+              storeName: data.storeName,
+              productType: data.productType,
+            },
+          },
+        },
+        include: { vendorProfile: true }
+      });
+
+      const { password, ...userWithoutPassword } = user;
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
+      return { token, user: userWithoutPassword };
+    } catch (err: any) {
+      if (err.code === "P2002") {
+        throw new AppError(409, "CONFLICT", "Registration could not be completed");
+      }
+      throw err;
+    }
   }
 }

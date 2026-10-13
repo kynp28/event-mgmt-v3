@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { loginSchema } from "@eventcore/shared";
 import type { LoginPayload, UserSession } from "@eventcore/shared";
 import { apiFetch } from "@/lib/api-client";
@@ -77,6 +78,12 @@ export default function LoginPage() {
           >
             {form.formState.isSubmitting ? "Signing in..." : "Sign In"}
           </button>
+          
+          <div className="mt-4 text-center">
+            <Link href="/auth/register" className="text-sm text-blue-600 hover:underline">
+              ยังไม่มีบัญชี? สมัครสมาชิกผู้ค้า
+            </Link>
+          </div>
         </form>
       </div>
     </div>
