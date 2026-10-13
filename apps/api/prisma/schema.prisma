@@ -46,6 +46,11 @@ enum PaymentStatus {
   REJECTED
 }
 
+enum FeeType {
+  PER_BOOKING
+  PER_BOOTH
+}
+
 model User {
   id               String            @id @default(cuid())
   email            String            @unique
@@ -90,10 +95,12 @@ model Event {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  zones     Zone[]
-  booths    Booth[]
-  bookings  Booking[]
-  tickets   Ticket[]
+  zones      Zone[]
+  booths     Booth[]
+  boothTypes BoothType[]
+  fees       EventFee[]
+  bookings   Booking[]
+  tickets    Ticket[]
 
   @@index([organizerId])
 }
@@ -112,15 +119,48 @@ model Zone {
   @@index([eventId])
 }
 
-model Booth {
-  id        String      @id @default(cuid())
+model BoothType {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  name           String   @db.VarChar(100)
+  physicalWidth  Decimal? @db.Decimal(8, 2)
+  physicalLength Decimal? @db.Decimal(8, 2)
+  price          Decimal  @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  booths Booth[]
+
+  @@unique([eventId, name])
+  @@index([eventId])
+}
+
+model EventFee {
+  id        String   @id @default(cuid())
   eventId   String
-  event     Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  zoneId    String?
-  zone      Zone?       @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  code      String
-  price     Decimal     @db.Decimal(12, 2)
-  status    BoothStatus @default(AVAILABLE)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  name      String   @db.VarChar(100)
+  amount    Decimal  @db.Decimal(12, 2)
+  type      FeeType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, name])
+  @@index([eventId])
+}
+
+model Booth {
+  id          String      @id @default(cuid())
+  eventId     String
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  zoneId      String?
+  zone        Zone?       @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  boothTypeId String?
+  boothType   BoothType?  @relation(fields: [boothTypeId], references: [id], onDelete: SetNull)
+  code        String
+  price       Decimal     @db.Decimal(12, 2)
+  status      BoothStatus @default(AVAILABLE)
   
   // Physical size fields
   physicalLength Decimal? @db.Decimal(8, 2)
@@ -141,6 +181,7 @@ model Booth {
   @@unique([eventId, code])
   @@index([eventId, status])
   @@index([zoneId])
+  @@index([boothTypeId])
 }
 
 model Booking {
@@ -151,6 +192,7 @@ model Booking {
   event          Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
   status         BookingStatus @default(PAYMENT_PENDING)
   totalAmount    Decimal       @db.Decimal(12, 2)
+  feesSnapshot   Json?
   holdExpiresAt  DateTime?
   rejectionCount Int           @default(0)
   createdAt      DateTime      @default(now())
