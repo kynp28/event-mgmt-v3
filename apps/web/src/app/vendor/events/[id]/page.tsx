@@ -23,6 +23,7 @@ export default function VendorEventPage() {
   const [event, setEvent] = useState<any>(null);
   const [booths, setBooths] = useState<any[]>([]);
   const [fees, setFees] = useState<EventFee[]>([]);
+  const [feesError, setFeesError] = useState(false);
   const [selectedBooths, setSelectedBooths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"MAP" | "LIST">("MAP");
@@ -33,7 +34,10 @@ export default function VendorEventPage() {
       if (evt.status === "PUBLISHED") {
         const [bths, feesData] = await Promise.all([
           apiFetch(`/api/events/${id}/booths`),
-          apiFetch(`/api/events/${id}/fees`).catch(() => [])
+          apiFetch(`/api/events/${id}/fees`).catch(() => {
+            setFeesError(true);
+            return [];
+          })
         ]);
         setBooths(bths);
         setFees(feesData);
@@ -145,6 +149,12 @@ export default function VendorEventPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {feesError && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-lg mb-4 text-sm font-medium">
+          ไม่สามารถโหลดค่าธรรมเนียมได้ ยอดรวมที่แสดงอาจต่ำกว่ายอดจริง
         </div>
       )}
       
