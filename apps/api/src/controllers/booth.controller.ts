@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as boothService from "../services/booth.service";
-import { createBoothSchema, updateBoothSchema } from "@eventcore/shared";
+import { createBoothWithTypeSchema, updateBoothWithTypeSchema } from "../schemas/pricing.schema";
 
 export async function getBooths(req: Request, res: Response, next: NextFunction) {
   try {
@@ -17,7 +17,7 @@ export async function createBooth(req: Request, res: Response, next: NextFunctio
   try {
     const eventId = req.params.eventId;
     const userId = req.user!.id;
-    const data = createBoothSchema.parse(req.body);
+    const data = createBoothWithTypeSchema.parse(req.body);
     const booth = await boothService.createBooth(eventId, userId, data);
     res.status(201).json(booth);
   } catch (err: any) {
@@ -33,7 +33,7 @@ export async function updateBooth(req: Request, res: Response, next: NextFunctio
     const eventId = req.params.eventId;
     const boothId = req.params.boothId;
     const userId = req.user!.id;
-    const data = updateBoothSchema.parse(req.body);
+    const data = updateBoothWithTypeSchema.parse(req.body);
     const booth = await boothService.updateBooth(eventId, boothId, userId, data);
     res.json(booth);
   } catch (err: any) {
