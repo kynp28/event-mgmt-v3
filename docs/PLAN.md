@@ -88,7 +88,7 @@ Browser verification by the owner (screenshots). 2026-10-08: /events list (CLOSE
 ## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม [DONE]
 Owner browser check of Part A and Part B: PASSED (reported by owner on 2026-10-14; items not individually itemized).
 - **Decisions & Implementation:**
-  - **Booth types are templates:** `BoothType` (`id`, `eventId`, `name`, `physicalWidth` (Decimal 8,2)?, `physicalLength` (Decimal 8,2)?, `price` (Decimal 12,2)). The server does not auto-copy template values to booths; the web UI prefills price and size in the form upon selection, while `Booth.price` remains the sole source of truth for pricing. Deleting a booth type sets `boothTypeId` to null on referencing booths without affecting their prices.
+  - **Booth types are templates:** `BoothType` (`id`, `eventId`, `name` VarChar(100), `physicalWidth` Decimal(8,2)?, `physicalLength` Decimal(8,2)?, `price` Decimal(12,2)). The server does not auto-copy template values to booths; the web UI prefills price and size in the form upon selection, while `Booth.price` remains the sole source of truth for pricing. Deleting a booth type sets `boothTypeId` to null on referencing booths without affecting their prices.
   - **Fee model:** `EventFee` (`id`, `eventId`, `name` VarChar(100), `amount` Decimal(12,2) >= 0, `type` enum `PER_BOOKING` | `PER_BOOTH`). Name is unique per event (`@@unique([eventId, name])`). Maximum 20 fees per event (enforced at API layer with 400 `LIMIT_EXCEEDED`).
   - **Total formula:** `totalAmount = sum(booth prices) + (PER_BOOKING amounts x 1) + (PER_BOOTH amounts x booth count)`, computed strictly using `Prisma.Decimal` (never JS float math).
   - **feesSnapshot:** `Booking.feesSnapshot` (Json?) stores an array of `{ name, type, amount, quantity, subtotal }` with amounts and subtotals formatted as 2-decimal strings in creation order (`createdAt` ASC, `id` ASC), or `null` when the event has no fees.
@@ -96,6 +96,7 @@ Owner browser check of Part A and Part B: PASSED (reported by owner on 2026-10-1
     - `GET/POST /api/organizer/events/:eventId/fees` and `PUT/DELETE /api/organizer/events/:eventId/fees/:feeId` (Organizer CRUD)
     - `GET/POST /api/organizer/events/:eventId/booth-types` and `PUT/DELETE /api/organizer/events/:eventId/booth-types/:typeId` (Organizer CRUD)
     - `GET /api/events/:id/fees` (Public, no auth): returns `[{ name, type, amount }]` in creation order; 404 for non-existent or DRAFT events.
+  - **Concurrency:** fee rows and booth prices are read inside the same $transaction as the booth locking, so prices cannot change during a booking.
   - **Immutability:** Modifying or deleting an `EventFee` or `BoothType` after booking never changes existing bookings; `feesSnapshot` and `totalAmount` remain immutable.
   - **Schemas:** Live in `apps/api/src/schemas/pricing.schema.ts` because `packages/shared` is frozen.
 - **Web:**
@@ -109,6 +110,7 @@ Owner browser check of Part A and Part B: PASSED (reported by owner on 2026-10-1
   - Amount upper bound vs `Booking.totalAmount` Decimal(12,2) overflow is not enforced.
   - No test yet proving the server does not auto-copy the booth type price (current test used equal prices).
   - Public booth map as a grid is backlog.
+- **Quality Requirements Coverage:** รองรับข้อ 4 อย่างเคร่งครัด
 
 ## D. ยอมรับสัญญาเช่า
 - **Schema:**
