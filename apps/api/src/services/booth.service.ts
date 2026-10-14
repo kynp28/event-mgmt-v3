@@ -1,5 +1,5 @@
 import { db } from "../lib/db";
-import { CreateBoothPayload, UpdateBoothPayload } from "@eventcore/shared";
+import { CreateBoothWithTypePayload, UpdateBoothWithTypePayload } from "../schemas/pricing.schema";
 import { AppError } from "../utils/AppError";
 
 async function verifyEventOwnership(eventId: string, organizerId: string) {
@@ -19,13 +19,24 @@ export async function getBoothsByEvent(eventId: string, organizerId: string) {
   });
 }
 
-export async function createBooth(eventId: string, organizerId: string, data: CreateBoothPayload) {
+export async function createBooth(eventId: string, organizerId: string, data: CreateBoothWithTypePayload) {
   await verifyEventOwnership(eventId, organizerId);
+
+  if (data.boothTypeId) {
+    const boothType = await db.boothType.findFirst({
+      where: { id: data.boothTypeId, eventId }
+    });
+    if (!boothType) {
+      throw new AppError(400, "BAD_REQUEST", "Booth type not found in this event");
+    }
+  }
+
   return db.booth.create({
     data: {
       eventId,
       code: data.code,
       zoneId: data.zoneId || null,
+      boothTypeId: data.boothTypeId || null,
       price: data.price,
       physicalLength: data.physicalLength || null,
       physicalWidth: data.physicalWidth || null,
@@ -34,7 +45,7 @@ export async function createBooth(eventId: string, organizerId: string, data: Cr
   });
 }
 
-export async function updateBooth(eventId: string, boothId: string, organizerId: string, data: UpdateBoothPayload) {
+export async function updateBooth(eventId: string, boothId: string, organizerId: string, data: UpdateBoothWithTypePayload) {
   await verifyEventOwnership(eventId, organizerId);
   
   const booth = await db.booth.findFirst({
@@ -51,11 +62,21 @@ export async function updateBooth(eventId: string, boothId: string, organizerId:
     throw new AppError(400, "BAD_REQUEST", `Cannot manually set booth status to ${data.status}`);
   }
 
+  if (data.boothTypeId) {
+    const boothType = await db.boothType.findFirst({
+      where: { id: data.boothTypeId, eventId }
+    });
+    if (!boothType) {
+      throw new AppError(400, "BAD_REQUEST", "Booth type not found in this event");
+    }
+  }
+
   return db.booth.update({
     where: { id: boothId },
     data: {
       code: data.code,
       zoneId: data.zoneId !== undefined ? data.zoneId : undefined,
+      boothTypeId: data.boothTypeId !== undefined ? data.boothTypeId : undefined,
       price: data.price,
       physicalLength: data.physicalLength !== undefined ? data.physicalLength : undefined,
       physicalWidth: data.physicalWidth !== undefined ? data.physicalWidth : undefined,

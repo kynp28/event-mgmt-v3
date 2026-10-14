@@ -15,6 +15,7 @@ import * as bookingController from "./controllers/booking.controller";
 import * as paymentController from "./controllers/payment.controller";
 import * as ticketController from "./controllers/ticket.controller";
 import * as vendorController from "./controllers/vendor.controller";
+import * as pricingController from "./controllers/pricing.controller";
 import { requireJobsSecret } from "./middlewares/jobs.middleware";
 import { AppError } from "./utils/AppError";
 
@@ -73,6 +74,7 @@ export function createApp(options?: AppOptions) {
   app.get("/api/events", eventController.getPublicEvents);
   app.get("/api/events/:id", eventController.getPublicEventById);
   app.get("/api/events/:id/booths", optionalAuth, eventController.getEventBooths);
+  app.get("/api/events/:id/fees", pricingController.getPublicFees);
 
   // Organizer Event Routes
   const isOrganizer = [requireAuth, requireRole(["ORGANIZER"])];
@@ -87,6 +89,18 @@ export function createApp(options?: AppOptions) {
   app.post("/api/organizer/events/:eventId/zones", isOrganizer, zoneController.createZone);
   app.patch("/api/organizer/events/:eventId/zones/:zoneId", isOrganizer, zoneController.updateZone);
   app.delete("/api/organizer/events/:eventId/zones/:zoneId", isOrganizer, zoneController.deleteZone);
+
+  // Booth Type Routes
+  app.get("/api/organizer/events/:eventId/booth-types", isOrganizer, pricingController.getBoothTypes);
+  app.post("/api/organizer/events/:eventId/booth-types", isOrganizer, pricingController.createBoothType);
+  app.put("/api/organizer/events/:eventId/booth-types/:typeId", isOrganizer, pricingController.updateBoothType);
+  app.delete("/api/organizer/events/:eventId/booth-types/:typeId", isOrganizer, pricingController.deleteBoothType);
+
+  // Fee Routes
+  app.get("/api/organizer/events/:eventId/fees", isOrganizer, pricingController.getFees);
+  app.post("/api/organizer/events/:eventId/fees", isOrganizer, pricingController.createFee);
+  app.put("/api/organizer/events/:eventId/fees/:feeId", isOrganizer, pricingController.updateFee);
+  app.delete("/api/organizer/events/:eventId/fees/:feeId", isOrganizer, pricingController.deleteFee);
 
   // Booth Routes
   app.get("/api/organizer/events/:eventId/booths", isOrganizer, boothController.getBooths);

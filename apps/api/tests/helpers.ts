@@ -11,6 +11,8 @@ export async function clearDb() {
     db.bookingItem.deleteMany(),
     db.booking.deleteMany(),
     db.booth.deleteMany(),
+    db.boothType.deleteMany(),
+    db.eventFee.deleteMany(),
     db.zone.deleteMany(),
     db.event.deleteMany(),
     db.auditLog.deleteMany(),
