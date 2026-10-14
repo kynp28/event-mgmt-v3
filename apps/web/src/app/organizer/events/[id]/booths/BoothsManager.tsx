@@ -2,18 +2,29 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api-client";
+import { translateApiError } from "@/lib/thai-errors";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createBoothSchema } from "@eventcore/shared";
+import { z } from "zod";
 import dynamic from "next/dynamic";
 
 const FloorplanEditor = dynamic(() => import("./FloorplanEditor"), { ssr: false });
+
+export type BoothType = {
+  id: string;
+  name: string;
+  price: string;
+  physicalLength: string | null;
+  physicalWidth: string | null;
+};
 
 type Booth = {
   id: string;
   code: string;
   zoneId: string | null;
+  boothTypeId?: string | null;
   price: string;
   physicalLength: string | null;
   physicalWidth: string | null;
@@ -27,7 +38,21 @@ type Booth = {
 
 type Zone = { id: string; name: string; };
 
-export function BoothsManager({ event, initialBooths, zones }: { event: any; initialBooths: Booth[]; zones: Zone[] }) {
+const createBoothFormSchema = createBoothSchema.extend({
+  boothTypeId: z.string().optional().nullable(),
+});
+
+export function BoothsManager({
+  event,
+  initialBooths,
+  zones,
+  boothTypes = [],
+}: {
+  event: any;
+  initialBooths: Booth[];
+  zones: Zone[];
+  boothTypes?: BoothType[];
+}) {
   const router = useRouter();
   const [booths, setBooths] = useState<Booth[]>(initialBooths);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,13 +60,22 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
   const [isSavingPositions, setIsSavingPositions] = useState(false);
   
   const form = useForm({
-    resolver: zodResolver(createBoothSchema) as any,
-    defaultValues: { code: "", zoneId: "", price: "", physicalLength: "", physicalWidth: "", status: "AVAILABLE" }
+    resolver: zodResolver(createBoothFormSchema) as any,
+    defaultValues: {
+      code: "",
+      zoneId: "",
+      boothTypeId: "",
+      price: "",
+      physicalLength: "",
+      physicalWidth: "",
+      status: "AVAILABLE",
+    }
   });
 
   const onSubmit = async (data: any) => {
     const payload = { ...data };
     if (!payload.zoneId) payload.zoneId = null;
+    if (!payload.boothTypeId) payload.boothTypeId = null;
     if (!payload.physicalLength) payload.physicalLength = null;
     if (!payload.physicalWidth) payload.physicalWidth = null;
 
@@ -57,14 +91,22 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
           body: JSON.stringify(payload)
         });
       }
-      form.reset({ code: "", zoneId: "", price: "", physicalLength: "", physicalWidth: "", status: "AVAILABLE" });
+      form.reset({
+        code: "",
+        zoneId: "",
+        boothTypeId: "",
+        price: "",
+        physicalLength: "",
+        physicalWidth: "",
+        status: "AVAILABLE",
+      });
       setEditingId(null);
       
       const updated = await apiFetch(`/api/organizer/events/${event.id}/booths`);
       setBooths(updated);
       router.refresh();
     } catch (err: any) {
-      alert(err.message);
+      alert(translateApiError(err, "booths"));
     }
   };
 
@@ -73,6 +115,7 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
     form.reset({ 
       code: b.code, 
       zoneId: b.zoneId || "", 
+      boothTypeId: b.boothTypeId || "",
       price: b.price, 
       physicalLength: b.physicalLength || "", 
       physicalWidth: b.physicalWidth || "",
@@ -81,14 +124,14 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
   };
 
   const handleDelete = async (boothId: string) => {
-    if (!confirm("Are you sure?")) return;
+    if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบบูธนี้?")) return;
     try {
       await apiFetch(`/api/organizer/events/${event.id}/booths/${boothId}`, { method: "DELETE" });
       const updated = await apiFetch(`/api/organizer/events/${event.id}/booths`);
       setBooths(updated);
       router.refresh();
     } catch (err: any) {
-      alert(err.message);
+      alert(translateApiError(err, "booths"));
     }
   };
 
@@ -178,6 +221,32 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
                 </select>
               </div>
               <div>
+                <label className="block text-sm">ประเภทบูธ</label>
+                <select
+                  {...form.register("boothTypeId")}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    form.setValue("boothTypeId", selectedId);
+                    if (selectedId) {
+                      const selectedType = boothTypes.find((bt) => bt.id === selectedId);
+                      if (selectedType) {
+                        form.setValue("price", selectedType.price);
+                        form.setValue("physicalLength", selectedType.physicalLength || "");
+                        form.setValue("physicalWidth", selectedType.physicalWidth || "");
+                      }
+                    }
+                  }}
+                  className="border p-2 w-full rounded"
+                >
+                  <option value="">ไม่ระบุประเภท</option>
+                  {boothTypes.map((bt) => (
+                    <option key={bt.id} value={bt.id}>
+                      {bt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm">Price</label>
                 <input type="number" step="0.01" {...form.register("price")} className="border p-2 w-full rounded" />
                 {form.formState.errors.price && <p className="text-red-500 text-sm">{form.formState.errors.price.message as string}</p>}
@@ -205,7 +274,7 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
                   {editingId ? "Save" : "Create"}
                 </button>
                 {editingId && (
-                  <button type="button" onClick={() => { setEditingId(null); form.reset({ code: "", zoneId: "", price: "", physicalLength: "", physicalWidth: "", status: "AVAILABLE" }); }} className="bg-gray-200 px-4 py-2 rounded flex-1">
+                  <button type="button" onClick={() => { setEditingId(null); form.reset({ code: "", zoneId: "", boothTypeId: "", price: "", physicalLength: "", physicalWidth: "", status: "AVAILABLE" }); }} className="bg-gray-200 px-4 py-2 rounded flex-1">
                     Cancel
                   </button>
                 )}
@@ -219,6 +288,7 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
               <thead>
                 <tr className="border-b">
                   <th className="p-2">Code</th>
+                  <th className="p-2">Type</th>
                   <th className="p-2">Zone</th>
                   <th className="p-2">Price</th>
                   <th className="p-2">Size (m)</th>
@@ -230,10 +300,18 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
               <tbody>
                 {booths.map(b => {
                   const zone = zones.find(z => z.id === b.zoneId);
+                  const boothType = boothTypes.find(bt => bt.id === b.boothTypeId);
                   const isLocked = b.status === "BOOKED" || b.status === "PAYMENT_PENDING";
                   return (
                     <tr key={b.id} className="border-b">
                       <td className="p-2 font-medium">{b.code}</td>
+                      <td className="p-2">
+                        {boothType ? (
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm">{boothType.name}</span>
+                        ) : (
+                          <span className="text-gray-400 italic">ไม่ระบุประเภท</span>
+                        )}
+                      </td>
                       <td className="p-2">
                         {zone ? (
                           <span className="px-2 py-1 bg-gray-100 rounded text-sm">{zone.name}</span>
@@ -264,7 +342,7 @@ export function BoothsManager({ event, initialBooths, zones }: { event: any; ini
                 })}
                 {booths.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-4 text-center text-gray-500">No booths created yet</td>
+                    <td colSpan={8} className="p-4 text-center text-gray-500">No booths created yet</td>
                   </tr>
                 )}
               </tbody>

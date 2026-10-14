@@ -14,12 +14,22 @@ export function translateFieldError(message: string): string {
   return fieldErrorMap[message] || "ข้อมูลไม่ถูกต้อง";
 }
 
-export function translateApiError(err: unknown, context: "register" | "profile"): string {
+export type ErrorContext = "register" | "profile" | "fees" | "booth-types" | "booths" | "organizer";
+
+export function translateApiError(err: unknown, context?: ErrorContext): string {
   if (err instanceof ApiError) {
     if (context === "register") {
       if (err.status === 409) return "ไม่สามารถสมัครด้วยข้อมูลนี้ได้ กรุณาตรวจสอบข้อมูล หรือเข้าสู่ระบบหากมีบัญชีอยู่แล้ว";
     } else if (context === "profile") {
       if (err.status === 403) return "หน้านี้สำหรับบัญชีผู้ค้าเท่านั้น";
+    } else if (context === "fees") {
+      if (err.code === "CONFLICT" || err.status === 409) return "ชื่อค่าธรรมเนียมนี้มีอยู่แล้วในอีเวนต์";
+      if (err.code === "LIMIT_EXCEEDED") return "ไม่สามารถเพิ่มค่าธรรมเนียมได้เกิน 20 รายการต่ออีเวนต์";
+    } else if (context === "booth-types") {
+      if (err.code === "CONFLICT" || err.status === 409) return "ชื่อประเภทบูธนี้มีอยู่แล้วในอีเวนต์";
+    } else if (context === "booths") {
+      if (err.code === "CONFLICT" || err.status === 409) return "รหัสบูธนี้มีอยู่แล้วในอีเวนต์";
+      if (err.code === "BAD_REQUEST" && err.message?.includes("Booth type")) return "ไม่พบประเภทบูธในอีเวนต์นี้";
     }
     
     if (err.status === 429) return "ส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่";

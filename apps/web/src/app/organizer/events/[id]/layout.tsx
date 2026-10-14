@@ -48,8 +48,14 @@ export default async function EventManageLayout({
         <Link href={`/organizer/events/${id}/zones`} className="font-medium text-gray-600 hover:text-black">
           Zones
         </Link>
+        <Link href={`/organizer/events/${id}/booth-types`} className="font-medium text-gray-600 hover:text-black">
+          ประเภทบูธ
+        </Link>
         <Link href={`/organizer/events/${id}/booths`} className="font-medium text-gray-600 hover:text-black">
           Booths
+        </Link>
+        <Link href={`/organizer/events/${id}/fees`} className="font-medium text-gray-600 hover:text-black">
+          ค่าธรรมเนียม
         </Link>
         <Link href={`/organizer/events/${id}/payments`} className="font-medium text-gray-600 hover:text-black">
           Payments
