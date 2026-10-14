@@ -62,7 +62,14 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
           where: { id: { in: uniqueBoothIds } },
           select: { id: true, price: true }
         });
-        // 3. Create Booking
+
+        // 3. Read event fees inside the transaction
+        const fees = await tx.eventFee.findMany({
+          where: { eventId: data.eventId },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+        });
+
+        // 4. Create Booking
         let totalAmount = new Prisma.Decimal(0);
         const bookingItems = booths.map(b => {
           totalAmount = totalAmount.add(b.price);
@@ -71,6 +78,30 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
             price: b.price
           };
         });
+
+        let feesSnapshot: Array<{
+          name: string;
+          type: "PER_BOOKING" | "PER_BOOTH";
+          amount: string;
+          quantity: number;
+          subtotal: string;
+        }> | null = null;
+
+        if (fees.length > 0) {
+          feesSnapshot = fees.map(f => {
+            const quantity = f.type === "PER_BOOKING" ? 1 : booths.length;
+            const subtotal = f.amount.mul(quantity);
+            totalAmount = totalAmount.add(subtotal);
+            return {
+              name: f.name,
+              type: f.type,
+              amount: f.amount.toFixed(2),
+              quantity,
+              subtotal: subtotal.toFixed(2)
+            };
+          });
+        }
+
         const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // +10 mins
         const booking = await tx.booking.create({
           data: {
@@ -78,6 +109,7 @@ export async function createBooking(vendorId: string, data: CreateBookingPayload
             eventId: data.eventId,
             status: "PAYMENT_PENDING",
             totalAmount,
+            feesSnapshot: feesSnapshot ? (feesSnapshot as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
             holdExpiresAt,
             items: {
               create: bookingItems
