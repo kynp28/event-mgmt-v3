@@ -85,24 +85,30 @@ Browser verification by the owner (screenshots). 2026-10-08: /events list (CLOSE
   - Booking link: anonymous -> /login; VENDOR -> /vendor/events/[id]; ORGANIZER/ADMIN -> no link; not shown unless PUBLISHED.
 - **Quality Requirements Coverage:** ครอบคลุมข้อ 5
 
-## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม
-- **Schema:**
-  - สร้างโมเดล `BoothType` (`id`, `eventId`, `name`, `physicalWidth` (Decimal 8,2), `physicalLength` (Decimal 8,2), `price` (Decimal 12,2))
-  - `Booth` เพิ่มฟิลด์ `boothTypeId` โดยใช้ `Booth.price` เป็นแหล่งความจริงตอนจอง ผู้จัดสามารถแก้ `Booth.price` รายบูธได้
-  - สร้างโมเดล `EventFee` (`id`, `eventId`, `name`, `amount` (Decimal 12,2), `type` [enum `PER_BOOKING`, `PER_BOOTH`])
-  - เพิ่มฟิลด์ `feesSnapshot` (Json) ในโมเดล `Booking`
-- **Endpoints:**
-  - `POST/PUT /api/organizer/events/:eventId/fees` และ `POST/PUT /api/organizer/events/:eventId/booth-types` (Organizer): จัดการค่าธรรมเนียมและประเภทบูธ
-  - `POST /api/vendor/bookings` (Vendor): คำนวณ `totalAmount`
-- **การเปลี่ยนสถานะ:** ไม่มี
-- **Concurrency & Prevention:** ป้องกันการเปลี่ยนราคาระหว่างจองโดยโหลดราคาจาก `tx.booth` และ `tx.eventFee` ภายใน `$transaction` เดียวกัน
-- **ระบบเดิมที่ถูกแทนที่/ต้องลบ:** ตรรกะการคำนวณราคาแบบเก่า
-- **Tests ที่จะเขียนเพิ่ม:**
-  - การจองคำนวณ totalAmount ได้ถูกต้อง (บูธ + ค่าธรรมเนียม)
-  - การเปลี่ยนราคา EventFee หรือ BoothType ในภายหลัง ไม่กระทบ `totalAmount` ของ Booking เก่า
-- **Test เดิมที่ต้องยังผ่าน:** ไม่มี Test ใน Vitest ที่ตั้งชื่อเป็น Pricing Test โดยเฉพาะ การออกแบบเป็นแบบ **Backward-compatible:** ถ้าง่วนต์ใดไม่มีแถวใน EventFee ยอดรวมจะเท่ากับผลรวมของ Booth.price ตามเดิม 100% ทำให้ Test เก่าผ่านทั้งหมด
-- **Web:** ฟอร์มสร้างงานเพิ่มส่วนการจัดการค่าธรรมเนียม/ประเภทบูธ, หน้าชำระเงินต้องแสดง Breakdown
-- **Quality Requirements Coverage:** รองรับข้อ 4 อย่างเคร่งครัด
+## C. ประเภทบูธและค่าธรรมเนียมเพิ่ม [DONE]
+Owner browser check of Part A and Part B: PASSED (reported by owner on 2026-10-14; items not individually itemized).
+- **Decisions & Implementation:**
+  - **Booth types are templates:** `BoothType` (`id`, `eventId`, `name`, `physicalWidth` (Decimal 8,2)?, `physicalLength` (Decimal 8,2)?, `price` (Decimal 12,2)). The server does not auto-copy template values to booths; the web UI prefills price and size in the form upon selection, while `Booth.price` remains the sole source of truth for pricing. Deleting a booth type sets `boothTypeId` to null on referencing booths without affecting their prices.
+  - **Fee model:** `EventFee` (`id`, `eventId`, `name` VarChar(100), `amount` Decimal(12,2) >= 0, `type` enum `PER_BOOKING` | `PER_BOOTH`). Name is unique per event (`@@unique([eventId, name])`). Maximum 20 fees per event (enforced at API layer with 400 `LIMIT_EXCEEDED`).
+  - **Total formula:** `totalAmount = sum(booth prices) + (PER_BOOKING amounts x 1) + (PER_BOOTH amounts x booth count)`, computed strictly using `Prisma.Decimal` (never JS float math).
+  - **feesSnapshot:** `Booking.feesSnapshot` (Json?) stores an array of `{ name, type, amount, quantity, subtotal }` with amounts and subtotals formatted as 2-decimal strings in creation order (`createdAt` ASC, `id` ASC), or `null` when the event has no fees.
+  - **Endpoints:**
+    - `GET/POST /api/organizer/events/:eventId/fees` and `PUT/DELETE /api/organizer/events/:eventId/fees/:feeId` (Organizer CRUD)
+    - `GET/POST /api/organizer/events/:eventId/booth-types` and `PUT/DELETE /api/organizer/events/:eventId/booth-types/:typeId` (Organizer CRUD)
+    - `GET /api/events/:id/fees` (Public, no auth): returns `[{ name, type, amount }]` in creation order; 404 for non-existent or DRAFT events.
+  - **Immutability:** Modifying or deleting an `EventFee` or `BoothType` after booking never changes existing bookings; `feesSnapshot` and `totalAmount` remain immutable.
+  - **Schemas:** Live in `apps/api/src/schemas/pricing.schema.ts` because `packages/shared` is frozen.
+- **Web:**
+  - Organizer pages for `/organizer/events/[id]/fees` and `/organizer/events/[id]/booth-types` modeled after the zones manager, with navigation links in layout. All UI text in Thai with exact labels: `"ต่อการจอง (คิดทุกครั้งที่จอง)"` and `"ต่อบูธ"`.
+  - `BoothsManager.tsx`: added booth type select ("ไม่ระบุประเภท") which prefills price and physical dimensions.
+  - Vendor event page (`/vendor/events/[id]`): loads public fees, displays fee list with Thai labels, computes fee breakdown and grand total using string-safe integer satang (`BigInt`) math (`@/lib/money.ts`), and warns if fees fail to load (`"ไม่สามารถโหลดค่าธรรมเนียมได้ ยอดรวมที่แสดงอาจต่ำกว่ายอดจริง"`).
+  - Vendor bookings page (`/vendor/bookings`): displays booth items with prices, fee snapshot breakdown with quantities and subtotals, and total taken directly from `booking.totalAmount` without recomputation; falls back gracefully when `feesSnapshot` is null.
+- **Follow-ups:**
+  - Organizer payments page does not show the fee breakdown yet.
+  - Fee-cap check (20) is not atomic.
+  - Amount upper bound vs `Booking.totalAmount` Decimal(12,2) overflow is not enforced.
+  - No test yet proving the server does not auto-copy the booth type price (current test used equal prices).
+  - Public booth map as a grid is backlog.
 
 ## D. ยอมรับสัญญาเช่า
 - **Schema:**
