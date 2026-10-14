@@ -9,12 +9,20 @@ const FloorplanCanvas = dynamic(() => import("@/components/FloorplanCanvas"), { 
 
 import { LogoutButton } from "@/components/LogoutButton";
 import Link from "next/link";
+import { formatMoney, formatSatang, multiplySatang, sumSatang } from "@/lib/money";
+
+interface EventFee {
+  name: string;
+  type: "PER_BOOKING" | "PER_BOOTH";
+  amount: string;
+}
 
 export default function VendorEventPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
   const [event, setEvent] = useState<any>(null);
   const [booths, setBooths] = useState<any[]>([]);
+  const [fees, setFees] = useState<EventFee[]>([]);
   const [selectedBooths, setSelectedBooths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"MAP" | "LIST">("MAP");
@@ -23,8 +31,12 @@ export default function VendorEventPage() {
     apiFetch(`/api/events/${id}`).then(async (evt) => {
       setEvent(evt);
       if (evt.status === "PUBLISHED") {
-        const bths = await apiFetch(`/api/events/${id}/booths`);
+        const [bths, feesData] = await Promise.all([
+          apiFetch(`/api/events/${id}/booths`),
+          apiFetch(`/api/events/${id}/fees`).catch(() => [])
+        ]);
         setBooths(bths);
+        setFees(feesData);
       }
       setLoading(false);
     }).catch(err => {
@@ -83,10 +95,24 @@ export default function VendorEventPage() {
     );
   }
 
-  const selectedTotal = selectedBooths.reduce((sum, bId) => {
-    const b = booths.find(x => x.id === bId);
-    return sum + (b ? Number(b.price) : 0);
-  }, 0);
+  const selectedBoothItems = selectedBooths
+    .map((bId) => booths.find((x) => x.id === bId))
+    .filter((b): b is NonNullable<typeof b> => b != null);
+
+  const boothSubtotalSatang = sumSatang(selectedBoothItems.map((b) => b.price));
+
+  const feeCalculations = fees.map((f) => {
+    const qty = f.type === "PER_BOOKING" ? 1 : selectedBooths.length;
+    const subtotalSatang = multiplySatang(f.amount, qty);
+    return {
+      fee: f,
+      qty,
+      subtotalSatang,
+    };
+  });
+
+  const totalFeesSatang = sumSatang(feeCalculations.map((fc) => fc.subtotalSatang));
+  const grandTotalSatang = selectedBooths.length > 0 ? (boothSubtotalSatang + totalFeesSatang) : BigInt(0);
 
   const selectedCodes = selectedBooths.map(bId => booths.find(x => x.id === bId)?.code).join(", ");
   
@@ -105,6 +131,22 @@ export default function VendorEventPage() {
         </div>
         <LogoutButton />
       </div>
+
+      {fees.length > 0 && (
+        <div className="bg-white border rounded-lg p-4 mb-4 shadow-sm">
+          <h2 className="font-bold text-gray-800 mb-2">ค่าธรรมเนียมของงาน</h2>
+          <div className="divide-y text-sm">
+            {fees.map((fee, idx) => (
+              <div key={idx} className="py-1.5 flex justify-between items-center">
+                <span className="font-medium text-gray-700">{fee.name}</span>
+                <span className="text-gray-600">
+                  {formatMoney(fee.amount)} บาท ({fee.type === "PER_BOOKING" ? "ต่อการจอง (คิดทุกครั้งที่จอง)" : "ต่อบูธ"})
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="flex justify-between items-center mb-4">
         <div className="flex space-x-2">
@@ -122,22 +164,42 @@ export default function VendorEventPage() {
           </button>
         </div>
         
-        <div className="flex items-center space-x-4 bg-blue-50 p-3 rounded-lg border border-blue-200 shadow-sm">
-          <div>
-            <p className="text-sm text-gray-500">Selected ({selectedBooths.length}/{event.maxBoothsPerVendor})</p>
-            <p className="font-bold text-blue-800">{selectedCodes || "None"}</p>
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm min-w-[340px]">
+          <div className="flex items-center justify-between space-x-4">
+            <div>
+              <p className="text-sm text-gray-500">Selected ({selectedBooths.length}/{event.maxBoothsPerVendor})</p>
+              <p className="font-bold text-blue-800">{selectedCodes || "None"}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">ยอดรวมทั้งหมด</p>
+              <p className="font-bold text-xl text-blue-800">{formatSatang(grandTotalSatang)} บาท</p>
+              <p className="text-xs text-gray-500">ยอดที่ระบบจะยืนยันเมื่อสร้างการจอง</p>
+            </div>
+            <button 
+              onClick={handleCheckout}
+              disabled={selectedBooths.length === 0}
+              className="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-50 font-bold hover:bg-blue-700"
+            >
+              Proceed to Checkout
+            </button>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Total</p>
-            <p className="font-bold text-xl text-blue-800">${selectedTotal.toFixed(2)}</p>
-          </div>
-          <button 
-            onClick={handleCheckout}
-            disabled={selectedBooths.length === 0}
-            className="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-50 font-bold hover:bg-blue-700"
-          >
-            Proceed to Checkout
-          </button>
+
+          {selectedBooths.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-blue-200 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-700">ค่าบูธ ({selectedBooths.length} บูธ):</span>
+                <span className="font-medium">{formatSatang(boothSubtotalSatang)} บาท</span>
+              </div>
+              {feeCalculations.map((fc, idx) => (
+                <div key={idx} className="flex justify-between">
+                  <span className="text-gray-700">
+                    {fc.fee.name} ({fc.fee.type === "PER_BOOKING" ? "ต่อการจอง (คิดทุกครั้งที่จอง)" : "ต่อบูธ"} x{fc.qty}):
+                  </span>
+                  <span className="font-medium">{formatSatang(fc.subtotalSatang)} บาท</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -175,7 +237,7 @@ export default function VendorEventPage() {
                   >
                     <div className="flex justify-between items-center">
                       <span className="font-bold">{booth.code}</span>
-                      <span className="text-sm">${booth.price}</span>
+                      <span className="text-sm">{formatMoney(booth.price)} บาท</span>
                     </div>
                     <div className="text-xs mt-1 text-gray-500">Status: {booth.status}</div>
                   </div>
@@ -197,7 +259,7 @@ export default function VendorEventPage() {
               >
                 <div>
                   <p className="font-bold">{booth.code}</p>
-                  <p className="text-sm">${booth.price}</p>
+                  <p className="text-sm">{formatMoney(booth.price)} บาท</p>
                 </div>
                 <input 
                   type="checkbox" 

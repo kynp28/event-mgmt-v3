@@ -5,6 +5,15 @@ import { apiFetch } from "@/lib/api-client";
 
 import { LogoutButton } from "@/components/LogoutButton";
 import Link from "next/link";
+import { formatMoney } from "@/lib/money";
+
+interface FeeSnapshotItem {
+  name: string;
+  type: string;
+  amount: string;
+  quantity: number;
+  subtotal: string;
+}
 
 export default function VendorBookingsPage() {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -78,6 +87,20 @@ export default function VendorBookingsPage() {
           const secs = Math.max(0, Math.floor((msLeft % 60000) / 1000));
           const timeString = `${mins}:${secs.toString().padStart(2, '0')}`;
           
+          const feesSnapshotList: FeeSnapshotItem[] | null = (() => {
+            if (!booking.feesSnapshot) return null;
+            if (Array.isArray(booking.feesSnapshot)) return booking.feesSnapshot as FeeSnapshotItem[];
+            if (typeof booking.feesSnapshot === "string") {
+              try {
+                const parsed = JSON.parse(booking.feesSnapshot);
+                return Array.isArray(parsed) ? (parsed as FeeSnapshotItem[]) : null;
+              } catch {
+                return null;
+              }
+            }
+            return null;
+          })();
+
           return (
             <div key={booking.id} className="border p-6 rounded shadow-sm">
               <div className="flex justify-between items-start mb-4">
@@ -108,13 +131,34 @@ export default function VendorBookingsPage() {
               </div>
               
               <div className="mb-4">
-                <p className="font-semibold">Booths:</p>
-                <div className="flex gap-2 mt-1">
+                <p className="font-semibold text-gray-700 mb-1">รายการบูธ:</p>
+                <div className="space-y-1">
                   {booking.items?.map((item: any) => (
-                    <span key={item.id} className="bg-gray-100 px-2 py-1 rounded text-sm">{item.booth?.code}</span>
+                    <div key={item.id} className="flex justify-between items-center text-sm bg-gray-50 px-3 py-1.5 rounded">
+                      <span>บูธ {item.booth?.code}</span>
+                      <span className="font-medium">{formatMoney(item.price)} บาท</span>
+                    </div>
                   ))}
                 </div>
-                <p className="mt-2 font-bold">Total: ${booking.totalAmount}</p>
+
+                {feesSnapshotList && feesSnapshotList.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-gray-100">
+                    <p className="font-semibold text-gray-700 mb-1">ค่าธรรมเนียม:</p>
+                    <div className="space-y-1">
+                      {feesSnapshotList.map((fee: FeeSnapshotItem, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center text-sm bg-gray-50 px-3 py-1.5 rounded">
+                          <span className="text-gray-600">{fee.name} (x{fee.quantity})</span>
+                          <span className="font-medium">{formatMoney(fee.subtotal)} บาท</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 pt-2 border-t flex justify-between items-center font-bold">
+                  <span>ยอดรวมทั้งหมด:</span>
+                  <span className="text-lg text-blue-800">{formatMoney(booking.totalAmount)} บาท</span>
+                </div>
               </div>
 
               {booking.status === "PAYMENT_PENDING" && msLeft > 0 && (
